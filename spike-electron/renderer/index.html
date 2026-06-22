@@ -1,0 +1,112 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spike v2 — 便签窗口探针</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 拖拽手柄（始终可交互） -->
+  <div class="drag-handle" onmousedown="window.spike.startDrag()">
+    <span class="title">🧪 Spike v2</span>
+    <div class="btn-group">
+      <button class="btn" id="btn-top" onclick="toggleTop()" title="置顶开关">📌</button>
+      <button class="btn" id="btn-pen" onclick="window.spike.togglePenetrate()" title="穿透开关 (Ctrl+Shift+P)">👆</button>
+      <button class="btn btn-close" onclick="window.spike.close()" title="关闭">✕</button>
+    </div>
+  </div>
+
+  <!-- 内容区（穿透目标区域） -->
+  <div class="content">
+    <div class="glass-card">
+      <h2>✅ 验证清单 (v2)</h2>
+      <ul class="checklist">
+        <li id="chk-frameless">无边框窗口</li>
+        <li id="chk-blur">毛玻璃背景</li>
+        <li id="chk-drag">拖拽移动</li>
+        <li id="chk-penetrate">鼠标穿透</li>
+        <li id="chk-wind">Win+D 不消失</li>
+        <li id="chk-menu">右键菜单</li>
+      </ul>
+    </div>
+
+    <div class="glass-card status-card">
+      <h3>📊 状态</h3>
+      <div class="status-row">
+        <span>穿透：</span><strong id="pen-status">关闭</strong>
+      </div>
+      <div class="status-row">
+        <span>置顶：</span><strong id="top-status">置顶</strong>
+      </div>
+    </div>
+
+    <p class="hint">
+      💡 <kbd>Ctrl+Shift+P</kbd> 穿透保险开关（穿透后也能恢复）<br/>
+      💡 穿透即使开启，拖拽手柄区域的按钮仍可点击<br/>
+      💡 按 <kbd>Win+D</kbd> 测试便签是否消失
+    </p>
+  </div>
+
+  <!-- 右键菜单 -->
+  <div class="context-menu" id="context-menu">
+    <div class="menu-item" onclick="window.spike.togglePenetrate()">切换鼠标穿透 (Ctrl+Shift+P)</div>
+    <div class="menu-item" onclick="toggleTop()">切换窗口置顶</div>
+    <div class="menu-separator"></div>
+    <div class="menu-item" onclick="window.spike.close()">关闭窗口</div>
+  </div>
+
+  <script>
+    let isAlwaysOnTop = true;
+
+    function toggleTop() {
+      isAlwaysOnTop = !isAlwaysOnTop;
+      window.spike.setAlwaysOnTop(isAlwaysOnTop);
+      const btn = document.getElementById("btn-top");
+      const status = document.getElementById("top-status");
+      if (isAlwaysOnTop) {
+        btn.classList.add("active");
+        status.textContent = "置顶";
+      } else {
+        btn.classList.remove("active");
+        status.textContent = "普通";
+      }
+    }
+
+    // 监听主进程推送的穿透状态变化
+    window.spike.onPenetrateChanged((isPen) => {
+      const btn = document.getElementById("btn-pen");
+      const status = document.getElementById("pen-status");
+      if (isPen) {
+        btn.classList.add("active");
+        btn.textContent = "🖱️";
+        status.textContent = "开启（点击空白可穿透）";
+      } else {
+        btn.classList.remove("active");
+        btn.textContent = "👆";
+        status.textContent = "关闭";
+      }
+    });
+
+    // 右键菜单
+    const contextMenu = document.getElementById("context-menu");
+    document.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      contextMenu.style.display = "block";
+      contextMenu.style.left = e.clientX + "px";
+      contextMenu.style.top = e.clientY + "px";
+    });
+    document.addEventListener("click", () => {
+      contextMenu.style.display = "none";
+    });
+
+    // 键盘快捷键
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "t" && e.ctrlKey) { e.preventDefault(); toggleTop(); }
+    });
+
+    // 初始状态
+    document.getElementById("btn-top").classList.add("active");
+  </script>
+</body>
+</html>

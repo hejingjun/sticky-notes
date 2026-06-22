@@ -1,0 +1,258 @@
+﻿/* ============================================================
+   Electron Spike — 渲染进程样式
+   毛玻璃 + 无边框 + 穿透适配
+   ============================================================ */
+
+/* ─── 全局 ─── */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: transparent;
+  color: #fff;
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+  border-radius: 12px;
+}
+
+/* ─── 毛玻璃背景层 ─── */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  /* 多层叠加模拟 Mica 效果 */
+  background:
+    /* 半透明磨砂层 */
+    rgba(30, 30, 30, 0.55);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: -1;
+}
+
+/* ─── 拖拽手柄 ─── */
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px 12px 0 0;
+  cursor: grab;
+  -webkit-app-region: drag;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle .title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ─── 按钮组 ─── */
+.btn-group {
+  display: flex;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.btn {
+  width: 28px;
+  height: 24px;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.btn.active {
+  background: rgba(100, 180, 255, 0.3);
+  color: #8cc8ff;
+}
+
+.btn-close:hover {
+  background: rgba(255, 80, 80, 0.4);
+  color: #ff6b6b;
+}
+
+/* ─── 内容区 ─── */
+.content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+/* ─── 玻璃卡片 ─── */
+.glass-card {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.glass-card h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.glass-card h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* ─── 验证清单 ─── */
+.checklist {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.checklist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.6);
+  transition: all 0.2s;
+}
+
+.checklist li::before {
+  content: "⬜";
+  font-size: 14px;
+}
+
+.checklist li.pass {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.checklist li.pass::before {
+  content: "✅";
+}
+
+.checklist li.fail {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.checklist li.fail::before {
+  content: "❌";
+}
+
+/* ─── 状态卡片 ─── */
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.status-row strong {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 500;
+}
+
+/* ─── 提示 ─── */
+.hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 1.6;
+  text-align: center;
+  margin-top: auto;
+  padding: 8px 0;
+}
+
+.hint kbd {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 10px;
+}
+
+/* ─── 右键菜单 ─── */
+.context-menu {
+  display: none;
+  position: fixed;
+  background: rgba(30, 30, 30, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 160px;
+  z-index: 1000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.menu-item {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.menu-separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 8px;
+}
+
+/* ─── 滚动条 ─── */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}

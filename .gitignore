@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+src-tauri/target/
+
+# Build output
+dist/sticky-notes.exe
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+*.rs.bk
