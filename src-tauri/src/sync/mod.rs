@@ -9,21 +9,29 @@ pub struct SyncPayload {
 
 /// Fetch notes.json from WebDAV, parse, return (payload, etag).
 pub async fn fetch(url: &str, user: &str, password: &str) -> Result<(SyncPayload, String), String> {
+    log::info!("[sync] GET {url}");
     let client = reqwest::Client::new();
     let resp = client
         .get(url)
         .basic_auth(user, Some(password))
         .send()
         .await
-        .map_err(|e| format!("WebDAV GET 失败: {e}"))?;
+        .map_err(|e| {
+            let msg = format!("WebDAV GET 失败: {e}");
+            log::error!("[sync] {msg}");
+            msg
+        })?;
 
     let status = resp.status();
+    log::info!("[sync] GET status: {status}");
     if status == reqwest::StatusCode::NOT_FOUND {
-        // No remote file yet — safe to treat as empty
+        log::info!("[sync] 远程文件不存在，视为空远程");
         return Ok((SyncPayload { notes: vec![] }, String::new()));
     }
     if !status.is_success() {
-        return Err(format!("WebDAV GET 返回 {}", status));
+        let msg = format!("WebDAV GET 返回 {status}");
+        log::error!("[sync] {msg}");
+        return Err(msg);
     }
 
     let etag = resp
@@ -32,13 +40,24 @@ pub async fn fetch(url: &str, user: &str, password: &str) -> Result<(SyncPayload
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default()
         .to_string();
+    log::info!("[sync] 远程 ETag: {etag}");
     if etag.is_empty() {
-        eprintln!("[sticky-notes] 警告: 远程服务器未返回 ETag，增量同步不可用");
+        log::warn!("[sync] 远程服务器未返回 ETag，增量同步不可用");
     }
 
-    let text = resp.text().await.map_err(|e| format!("读取响应失败: {e}"))?;
-    let payload: SyncPayload =
-        serde_json::from_str(&text).map_err(|e| format!("解析 notes.json 失败: {e}"))?;
+    let text = resp.text().await.map_err(|e| {
+        let msg = format!("读取响应失败: {e}");
+        log::error!("[sync] {msg}");
+        msg
+    })?;
+    log::info!("[sync] 响应体大小: {} bytes", text.len());
+
+    let payload: SyncPayload = serde_json::from_str(&text).map_err(|e| {
+        let msg = format!("解析 notes.json 失败: {e}");
+        log::error!("[sync] {msg}");
+        msg
+    })?;
+    log::info!("[sync] 解析到 {} 条远程笔记", payload.notes.len());
 
     Ok((payload, etag))
 }
@@ -46,6 +65,7 @@ pub async fn fetch(url: &str, user: &str, password: &str) -> Result<(SyncPayload
 /// PUT notes.json to WebDAV with If-Match for ETag-based locking.
 /// If etag is empty (first push), omit If-Match.
 pub async fn push(url: &str, user: &str, password: &str, notes: &[db::Note], etag: &str) -> Result<(), String> {
+    log::info!("[sync] PUT {url} (笔记数: {}, etag: {etag})", notes.len());
     let payload = SyncPayload {
         notes: notes.to_vec(),
     };
@@ -63,15 +83,24 @@ pub async fn push(url: &str, user: &str, password: &str, notes: &[db::Note], eta
         .body(body)
         .send()
         .await
-        .map_err(|e| format!("WebDAV PUT 失败: {e}"))?;
+        .map_err(|e| {
+            let msg = format!("WebDAV PUT 失败: {e}");
+            log::error!("[sync] {msg}");
+            msg
+        })?;
 
     let status = resp.status();
+    log::info!("[sync] PUT status: {status}");
     if status == reqwest::StatusCode::PRECONDITION_FAILED {
+        log::warn!("[sync] 412 Precondition Failed — 远程已被修改");
         return Err("同步冲突: 远程文件已被修改，请重新同步".into());
     }
     if !status.is_success() {
-        return Err(format!("WebDAV PUT 返回 {}", status));
+        let msg = format!("WebDAV PUT 返回 {status}");
+        log::error!("[sync] {msg}");
+        return Err(msg);
     }
+    log::info!("[sync] PUT 成功");
     Ok(())
 }
 
@@ -80,6 +109,7 @@ pub async fn push(url: &str, user: &str, password: &str, notes: &[db::Note], eta
 /// If equal updated_at but different content -> flag as conflict.
 /// Returns merged list and conflict marker flag.
 pub fn merge(local: Vec<db::Note>, remote: Vec<db::Note>) -> (Vec<db::Note>, bool) {
+    log::info!("[sync] merge: 本地 {} 条, 远程 {} 条", local.len(), remote.len());
     let mut map: std::collections::HashMap<String, db::Note> = std::collections::HashMap::new();
     let mut has_conflict = false;
 
@@ -96,20 +126,24 @@ pub fn merge(local: Vec<db::Note>, remote: Vec<db::Note>) -> (Vec<db::Note>, boo
                     || existing.completed != n.completed
                     || existing.due_date != n.due_date
                 {
+                    log::warn!("[sync] 冲突: 笔记 {} 的本地和远程版本 timestamp 相同但内容不同", n.id);
                     has_conflict = true;
                 }
                 // Keep existing (local wins tie)
                 continue;
             }
             if n.updated_at > existing.updated_at {
+                log::debug!("[sync] 笔记 {} 远程版本更新，采用远程", n.id);
                 map.insert(n.id.clone(), n);
             }
         } else {
+            log::debug!("[sync] 笔记 {} 仅存在于远程，拉取到本地", n.id);
             map.insert(n.id.clone(), n);
         }
     }
 
     let mut merged: Vec<db::Note> = map.into_values().collect();
     merged.sort_by(|a, b| a.order.cmp(&b.order));
+    log::info!("[sync] merge 完成: {} 条合并后笔记", merged.len());
     (merged, has_conflict)
 }

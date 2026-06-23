@@ -17,6 +17,7 @@ const listening = ref(false);
 const webdavUrl = ref("");
 const webdavUser = ref("");
 const webdavPassword = ref("");
+const showPassword = ref(false);
 const syncing = ref(false);
 const syncStatus = ref("");
 
@@ -173,7 +174,12 @@ async function save() {
         </label>
         <label class="field">
           <span class="label">密码</span>
-          <input v-model="webdavPassword" class="input" type="password" placeholder="密码" />
+          <div class="password-row">
+            <input v-model="webdavPassword" class="input" :type="showPassword ? 'text' : 'password'" placeholder="密码" />
+            <button class="eye-btn" @click="showPassword = !showPassword" :title="showPassword ? '隐藏密码' : '显示密码'">
+              {{ showPassword ? '🙈' : '👁' }}
+            </button>
+          </div>
         </label>
         <div class="webdav-actions">
           <button class="btn" @click="saveWebDAV">保存配置</button>
@@ -257,6 +263,15 @@ async function save() {
 }
 .toggle.on { background: rgba(74,222,128,0.2); border-color: rgba(74,222,128,0.3); color: #4ade80; }
 .hint { font-size: 10px; color: rgba(255,255,255,0.3); }
+.password-row { display: flex; gap: 4px; }
+.password-row .input { flex: 1; }
+.eye-btn {
+  width: 36px; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px;
+  background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.6);
+  cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.eye-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
 .error { font-size: 11px; color: #ff6b6b; padding: 6px 10px; background: rgba(255,80,80,0.1); border-radius: 4px; }
 .actions { display: flex; gap: 8px; justify-content: flex-end; }
 .btn {
