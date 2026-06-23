@@ -5,6 +5,9 @@ src-tauri/target/
 # Build output
 dist/sticky-notes.exe
 
+# Archives
+*.zip
+
 # IDE
 .vscode/
 .idea/
