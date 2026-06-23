@@ -44,32 +44,38 @@ impl SettingsManager {
         Self { config, path }
     }
 
+    fn save(&self) {
+        if let Err(e) = std::fs::write(&self.path, serde_json::to_string_pretty(&self.config).unwrap()) {
+            eprintln!("[sticky-notes] 设置写入失败: {e}");
+        }
+    }
+
     pub fn get_config(&self) -> &SettingsConfig { &self.config }
 
     pub fn update_penetrate(&mut self, accelerator: &str) {
         self.config.penetrate = accelerator.to_string();
-        let _ = std::fs::write(&self.path, serde_json::to_string_pretty(&self.config).unwrap());
+        self.save();
     }
 
     pub fn update_auto_purge(&mut self, v: bool) {
         self.config.auto_purge = v;
-        let _ = std::fs::write(&self.path, serde_json::to_string_pretty(&self.config).unwrap());
+        self.save();
     }
 
     pub fn update_opacity(&mut self, v: f64) {
         self.config.opacity = v;
-        let _ = std::fs::write(&self.path, serde_json::to_string_pretty(&self.config).unwrap());
+        self.save();
     }
 
     pub fn update_webdav(&mut self, url: &str, user: &str, password: &str) {
         self.config.webdav_url = url.to_string();
         self.config.webdav_user = user.to_string();
         self.config.webdav_password = password.to_string();
-        let _ = std::fs::write(&self.path, serde_json::to_string_pretty(&self.config).unwrap());
+        self.save();
     }
 
     pub fn update_theme(&mut self, theme: &str) {
         self.config.theme = theme.to_string();
-        let _ = std::fs::write(&self.path, serde_json::to_string_pretty(&self.config).unwrap());
+        self.save();
     }
 }

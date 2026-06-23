@@ -11,9 +11,6 @@
     "global-shortcut:allow-register",
     "dialog:default",
     "dialog:allow-save",
-    {
-      "identifier": "fs:allow-write",
-      "scope": ["**"]
-    }
+    "fs:allow-write-text-file"
   ]
 }

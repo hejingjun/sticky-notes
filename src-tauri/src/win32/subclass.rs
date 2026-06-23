@@ -9,6 +9,16 @@ const SW_SHOWNOACTIVATE: i32 = 4;
 
 const HTTRANSPARENT: isize = -1;
 
+/// TECH DEBT: PEN_PTR is a raw pointer to lib.rs's PEN AtomicBool.
+/// This is necessary because SetWindowSubclass callbacks cannot capture closures.
+/// The pointer is set exactly once in install_guard() before the window message
+/// loop starts, and `PEN` in lib.rs is a `static AtomicBool` — so the pointer
+/// remains valid for the entire lifetime of the application.
+///
+/// Potential improvement: pass a heap-allocated `Arc<AtomicBool>` via
+/// SetWindowSubclass's dwRefData parameter instead of using static mut.
+/// This is documented in docs/code-review.md §1.1 and deferred to a future
+/// iteration due to the risk of touching the Win32 subclassing hot path.
 static mut PEN_PTR: *const AtomicBool = std::ptr::null();
 
 unsafe fn is_penetrating() -> bool {

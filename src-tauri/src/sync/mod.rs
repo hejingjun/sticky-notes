@@ -30,8 +30,11 @@ pub async fn fetch(url: &str, user: &str, password: &str) -> Result<(SyncPayload
         .headers()
         .get("ETag")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
+        .unwrap_or_default()
         .to_string();
+    if etag.is_empty() {
+        eprintln!("[sticky-notes] 警告: 远程服务器未返回 ETag，增量同步不可用");
+    }
 
     let text = resp.text().await.map_err(|e| format!("读取响应失败: {e}"))?;
     let payload: SyncPayload =

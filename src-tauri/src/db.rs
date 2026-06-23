@@ -47,15 +47,26 @@ pub fn init_db(path: &str) -> Result<Connection, Box<dyn std::error::Error>> {
 
 pub fn list_notes(conn: &Connection) -> Result<Vec<Note>, Box<dyn std::error::Error>> {
     let mut stmt = conn.prepare(
-        "SELECT * FROM notes WHERE deleted_at IS NULL ORDER BY [order]"
+        "SELECT id, title, content, parent_id, [order], completed, pinned, color, \
+         created_at, updated_at, deleted_at, conflict_id, due_date, remind_at \
+         FROM notes WHERE deleted_at IS NULL ORDER BY [order]"
     )?;
     let rows = stmt.query_map([], |row| {
         Ok(Note {
-            id: row.get(0)?, title: row.get(1)?, content: row.get(2)?,
-            parent_id: row.get(3)?, order: row.get(4)?, completed: row.get(5)?,
-            pinned: row.get(6)?, color: row.get(7)?, created_at: row.get(8)?,
-            updated_at: row.get(9)?, deleted_at: row.get(10)?, conflict_id: row.get(11)?,
-            due_date: row.get(12)?, remind_at: row.get(13)?,
+            id: row.get("id")?,
+            title: row.get("title")?,
+            content: row.get("content")?,
+            parent_id: row.get("parent_id")?,
+            order: row.get("order")?,
+            completed: row.get("completed")?,
+            pinned: row.get("pinned")?,
+            color: row.get("color")?,
+            created_at: row.get("created_at")?,
+            updated_at: row.get("updated_at")?,
+            deleted_at: row.get("deleted_at")?,
+            conflict_id: row.get("conflict_id")?,
+            due_date: row.get("due_date")?,
+            remind_at: row.get("remind_at")?,
         })
     })?;
     Ok(rows.filter_map(|r| r.ok()).collect())

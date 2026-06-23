@@ -70,8 +70,10 @@ fn set_shortcut(
         let mgr = sm.lock().map_err(|e| e.to_string())?;
         mgr.get_config().penetrate.clone()
     };
-    let old_sc: Shortcut = old_accel.parse().map_err(|_| "shortcut parse error".to_string())?;
-    let _ = app.global_shortcut().unregister(old_sc);
+    let old_sc: Option<Shortcut> = old_accel.parse().ok();
+    if let Some(ref sc) = old_sc {
+        let _ = app.global_shortcut().unregister(sc.clone());
+    }
     {
         let mut mgr = sm.lock().map_err(|e| e.to_string())?;
         mgr.update_penetrate(&accelerator);
@@ -179,7 +181,9 @@ async fn sync_notes(
     sync::push(&url, &user, &password, &merged, &remote_etag).await?;
 
     // 6. Save new etag
-    let _ = std::fs::write(&etag_path, &remote_etag);
+    if let Err(e) = std::fs::write(&etag_path, &remote_etag) {
+        eprintln!("[sticky-notes] 同步 etag 写入失败: {e}");
+    }
 
     // 7. Reload on frontend
     let _ = app.emit("notes-reloaded", ());
@@ -231,9 +235,12 @@ pub fn run() {
     let app_dir = dirs_next::data_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("sticky-notes");
-    std::fs::create_dir_all(&app_dir).ok();
+    std::fs::create_dir_all(&app_dir).unwrap_or_else(|e| {
+        eprintln!("[sticky-notes] 创建数据目录失败: {e}");
+    });
     let db_path = app_dir.join("notes.db");
-    let conn = db::init_db(db_path.to_str().unwrap()).expect("DB init failed");
+    let db_path_str = db_path.to_string_lossy().into_owned();
+    let conn = db::init_db(&db_path_str).expect("DB init failed");
     let db_state = commands::DbState(Mutex::new(conn));
     let settings_mgr = Mutex::new(shortcuts::SettingsManager::new(&app_dir));
     let win_state_path = app_dir.join("window.json");
@@ -253,7 +260,6 @@ pub fn run() {
             commands::purge_old,
             commands::check_reminders,
             commands::export_notes,
-            commands::write_file,
             toggle_penetrate,
             get_penetrate,
             toggle_ontop,
@@ -281,7 +287,9 @@ pub fn run() {
                     let y = state["y"].as_i64().map(|v| v as i32);
                     let w_ = state["width"].as_u64().map(|v| v as u32);
                     let h = state["height"].as_u64().map(|v| v as u32);
-                    let _ = w.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x.unwrap_or(100), y.unwrap_or(100))));
+                    if let Err(e) = w.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x.unwrap_or(100), y.unwrap_or(100)))) {
+                        eprintln!("[sticky-notes] 恢复窗口位置失败: {e}");
+                    }
                     if let (Some(ww), Some(wh)) = (w_, h) {
                         let _ = w.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(ww, wh)));
                     }
@@ -296,7 +304,9 @@ pub fn run() {
                         if let Ok(mut state) = serde_json::from_str::<serde_json::Value>(&json) {
                             state["x"] = serde_json::json!(pos.x);
                             state["y"] = serde_json::json!(pos.y);
-                            let _ = std::fs::write(&wsp, state.to_string());
+                            if let Err(e) = std::fs::write(&wsp, state.to_string()) {
+                                eprintln!("[sticky-notes] 窗口位置写入失败: {e}");
+                            }
                         }
                     }
                 }
@@ -306,11 +316,13 @@ pub fn run() {
             w.on_window_event(move |ev| {
                 if let tauri::WindowEvent::Resized(size) = ev {
                     let pos = w_resized.inner_position().ok();
-                    let _ = std::fs::write(&wsp2, serde_json::json!({
+                    if let Err(e) = std::fs::write(&wsp2, serde_json::json!({
                         "x": pos.as_ref().map(|p| p.x).unwrap_or(100),
                         "y": pos.map(|p| p.y).unwrap_or(100),
                         "width": size.width, "height": size.height,
-                    }).to_string());
+                    }).to_string()) {
+                        eprintln!("[sticky-notes] 窗口尺寸写入失败: {e}");
+                    }
                 }
             });
 
@@ -326,7 +338,9 @@ pub fn run() {
                 if ev.state() == ShortcutState::Pressed {
                     let v = !PEN.load(Ordering::SeqCst);
                     PEN.store(v, Ordering::SeqCst);
-                    let _ = wh.set_ignore_cursor_events(v);
+                    if let Err(e) = wh.set_ignore_cursor_events(v) {
+                        eprintln!("[sticky-notes] set_ignore_cursor_events 失败: {e}");
+                    }
                     let _ = app.emit("penetrate-changed", v);
                     println!("[shortcut] penetrate: {v}");
                 }
@@ -336,15 +350,16 @@ pub fn run() {
             }
 
             // System tray
-            let icon_rgba = tray_icon::tray_icon_rgba();
-            let icon = tauri::image::Image::new_owned(icon_rgba, 32, 32);
+            let icon = tray_icon::tray_icon_image();
             let _tray = tauri::tray::TrayIconBuilder::with_id("main")
                 .icon(icon)
                 .tooltip("Sticky Notes")
                 .on_tray_icon_event(move |tray, event| {
                     if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = event {
                         if let Some(w) = tray.app_handle().get_webview_window("main") {
-                            let _ = w.show();
+                            if let Err(e) = w.show() {
+                                eprintln!("[sticky-notes] 托盘显示窗口失败: {e}");
+                            }
                             let _ = w.set_focus();
                         }
                     }

@@ -17,6 +17,7 @@ const isEditing = ref(false);
 const reminders = ref<Array<{ id: string; title: string }>>([]);
 let unlistenPen: (() => void) | null = null;
 let unlistenTop: (() => void) | null = null;
+let unlistenReload: (() => void) | null = null;
 let reminderTimer: ReturnType<typeof setInterval> | null = null;
 
 watch(isEditing, (v) => {
@@ -24,26 +25,33 @@ watch(isEditing, (v) => {
 });
 
 onMounted(async () => {
-  penetrating.value = await invoke<boolean>("get_penetrate");
-  ontop.value = await invoke<boolean>("get_ontop");
-  unlistenPen = await listen<boolean>("penetrate-changed", (e) => {
-    penetrating.value = e.payload;
-  });
-  unlistenTop = await listen<boolean>("ontop-changed", (e) => {
-    ontop.value = e.payload;
-  });
-  // Restore theme
-  const cfg: { theme: string } = await invoke("get_settings");
-  document.body.classList.add("theme-" + (cfg.theme || "green"));
-  await checkReminders();
-  reminderTimer = setInterval(checkReminders, 30_000);
-  // Reload notes after sync
-  const unload = await listen("notes-reloaded", () => load());
-  unlistenPen = unload; // just track for cleanup
+  try {
+    penetrating.value = await invoke<boolean>("get_penetrate");
+    ontop.value = await invoke<boolean>("get_ontop");
+  } catch (e) {
+    console.warn("读取初始状态失败:", e);
+  }
+  try {
+    unlistenPen = await listen<boolean>("penetrate-changed", (e) => {
+      penetrating.value = e.payload;
+    });
+    unlistenTop = await listen<boolean>("ontop-changed", (e) => {
+      ontop.value = e.payload;
+    });
+    const cfg: { theme: string } = await invoke("get_settings");
+    document.body.classList.add("theme-" + (cfg.theme || "green"));
+    await checkReminders();
+    reminderTimer = setInterval(checkReminders, 30_000);
+    const unload = await listen("notes-reloaded", () => load());
+    unlistenReload = unload;
+  } catch (e) {
+    console.warn("初始化事件监听失败:", e);
+  }
 });
 onUnmounted(() => {
   unlistenPen?.();
   unlistenTop?.();
+  unlistenReload?.();
   if (reminderTimer) clearInterval(reminderTimer);
 });
 
@@ -55,7 +63,7 @@ async function checkReminders() {
         reminders.value.push({ id: n.id, title: n.title || "无标题" });
       }
     }
-  } catch (_) {}
+  } catch (e) { console.warn("check_reminders 失败:", e); }
 }
 
 function dismissReminder(id: string) {
@@ -81,14 +89,16 @@ function startDrag() {
 async function exportNotes(format: string) {
   try {
     const csv = await invoke<string>("export_notes", { format });
-    const { save } = await import("@tauri-apps/plugin-dialog");
+    const [ { save }, { writeTextFile } ] = await Promise.all([
+      import("@tauri-apps/plugin-dialog"),
+      import("@tauri-apps/plugin-fs"),
+    ]);
     const path = await save({
       filters: [{ name: "CSV", extensions: ["csv"] }],
       defaultPath: `便签_${new Date().toISOString().slice(0, 10)}.csv`,
     });
     if (path) {
-      // Write via invoke to ensure correct permissions
-      await invoke("write_file", { path, contents: csv });
+      await writeTextFile(path, csv);
     }
   } catch (e) {
     console.error("导出失败:", e);
