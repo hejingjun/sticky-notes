@@ -2,8 +2,10 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 
+setlocal enabledelayedexpansion
+
 echo ========================================
-echo  Sticky Notes - Building...
+echo  Sticky Notes - Production Build
 echo ========================================
 
 set "NODE_DIR=C:\Users\hexin\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin"
@@ -18,7 +20,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo  Step 2/3: Building frontend + backend...
+echo  Step 2/3: Building frontend + Rust backend...
 call pnpm tauri build
 if %errorlevel% neq 0 (
     echo [ERROR] tauri build failed
@@ -26,11 +28,14 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+echo  Step 3/3: Copying to dist...
+copy /y "src-tauri\target\release\sticky-notes.exe" "dist\sticky-notes.exe" >nul
+
 echo.
 echo ========================================
 echo  Build complete!
 echo.
-echo  Output:
-echo  %~dp0src-tauri\target\release\sticky-notes.exe
+echo  Binary: %~dp0dist\sticky-notes.exe
 echo ========================================
 pause
+exit /b 0
