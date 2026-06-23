@@ -3,6 +3,7 @@ mod db;
 mod shortcuts;
 mod sync;
 mod win32;
+mod tray_icon;
 
 use std::sync::{atomic::AtomicBool, atomic::Ordering, Mutex};
 use tauri::{Emitter, Manager};
@@ -335,19 +336,7 @@ pub fn run() {
             }
 
             // System tray
-            let icon_rgba: Vec<u8> = {
-                let w = 32u32; let h = 32u32;
-                let mut px = Vec::with_capacity((w * h * 4) as usize);
-                for y in 0..h {
-                    for x in 0..w {
-                        let _corner = (x < 4 && y < 4) || (x >= w-4 && y < 4) || (x < 4 && y >= h-4) || (x >= w-4 && y >= h-4);
-                        let inner = x >= 2 && x < w-2 && y >= 2 && y < h-2;
-                        if inner { px.extend_from_slice(&[74, 222, 128, 240]); }
-                        else { px.extend_from_slice(&[0, 0, 0, 0]); }
-                    }
-                }
-                px
-            };
+            let icon_rgba = tray_icon::tray_icon_rgba();
             let icon = tauri::image::Image::new_owned(icon_rgba, 32, 32);
             let _tray = tauri::tray::TrayIconBuilder::with_id("main")
                 .icon(icon)

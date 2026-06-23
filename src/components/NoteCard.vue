@@ -233,7 +233,7 @@ function onDrop(e: DragEvent) {
               <span v-else-if="s.due_date" class="due-badge">{{ new Date(s.due_date).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" }) }}</span>
             </div>
           </div>
-          <button class="due-btn" :class="{ overdue: s.due_date && s.due_date < Date.now() && !s.completed }" @click.stop="initDueEdit(s); subDueId = s.id" title="截止日期">{{ s.due_date ? '📅' : '➕' }}</button>
+          <button class="due-btn" :class="{ overdue: s.due_date && s.due_date < Date.now() && !s.completed }" @click.stop="initDueEdit(s); subDueId = s.id; showDuePicker = true" title="截止日期">{{ s.due_date ? '📅' : '➕' }}</button>
           <button class="icon-btn" @click="startSubEdit(s)" title="编辑">✎</button>
           <button class="del" @click="emit('remove', s.id)" title="删除">&times;</button>
         </template>
