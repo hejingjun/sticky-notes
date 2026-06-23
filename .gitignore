@@ -4,6 +4,8 @@ src-tauri/target/
 
 # Build output
 dist/sticky-notes.exe
+dist/index.html
+dist/assets/
 
 # Archives
 *.zip
