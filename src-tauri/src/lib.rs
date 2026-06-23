@@ -142,7 +142,7 @@ async fn sync_notes(
     sm: tauri::State<'_, Mutex<shortcuts::SettingsManager>>,
     state: tauri::State<'_, commands::DbState>,
 ) -> Result<String, String> {
-    let (url, user, password) = {
+    let (base_url, user, password) = {
         let mgr = sm.lock().map_err(|e| e.to_string())?;
         let cfg = mgr.get_config();
         if cfg.webdav_url.is_empty() {
@@ -151,14 +151,23 @@ async fn sync_notes(
         (cfg.webdav_url.clone(), cfg.webdav_user.clone(), cfg.webdav_password.clone())
     };
 
+    // Build the full file URL: <base_url>/sticky-notes/notes.json
+    let base = base_url.trim_end_matches('/');
+    let remote_dir = format!("{}/sticky-notes", base);
+    let file_url = format!("{}/notes.json", remote_dir);
+    let dir_url = remote_dir;
+
     let etag_path = dirs_next::data_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("sticky-notes")
         .join(".sync_etag");
     let _local_etag = std::fs::read_to_string(&etag_path).unwrap_or_default();
 
+    // 0. Ensure remote directory exists (MKCOL — 坚果云 etc.)
+    sync::ensure_dir(&dir_url, &user, &password).await?;
+
     // 1. Fetch remote
-    let (remote_payload, remote_etag) = sync::fetch(&url, &user, &password).await?;
+    let (remote_payload, remote_etag) = sync::fetch(&file_url, &user, &password).await?;
 
     // 2. Get local notes (drop lock before await)
     let local_notes = {
@@ -178,7 +187,7 @@ async fn sync_notes(
     }
 
     // 5. Push merged to remote
-    sync::push(&url, &user, &password, &merged, &remote_etag).await?;
+    sync::push(&file_url, &user, &password, &merged, &remote_etag).await?;
 
     // 6. Save new etag
     if let Err(e) = std::fs::write(&etag_path, &remote_etag) {

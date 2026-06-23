@@ -162,18 +162,19 @@ async function save() {
           </div>
         </label>
 
-        <!-- WebDAV -->
-        <div class="section-title">WebDAV 同步</div>
+        <!-- WebDAV 坚果云 -->
+        <div class="section-title">WebDAV 同步（坚果云）</div>
         <label class="field">
-          <span class="label">服务器地址</span>
-          <input v-model="webdavUrl" class="input" placeholder="https://example.com/remote.php/dav/files/user/notes.json" />
+          <span class="label">坚果云 WebDAV 地址</span>
+          <input v-model="webdavUrl" class="input" placeholder="https://dav.jianguoyun.com/dav/" />
+          <span class="hint">坚果云 WebDAV 根地址，必须以 / 结尾</span>
         </label>
         <label class="field">
-          <span class="label">用户名</span>
-          <input v-model="webdavUser" class="input" placeholder="用户名" />
+          <span class="label">坚果云账号</span>
+          <input v-model="webdavUser" class="input" placeholder="your@email.com" />
         </label>
         <label class="field">
-          <span class="label">密码</span>
+          <span class="label">应用密码</span>
           <div class="password-row">
             <input v-model="webdavPassword" class="input" :type="showPassword ? 'text' : 'password'" placeholder="密码" />
             <button class="eye-btn" @click="showPassword = !showPassword" :title="showPassword ? '隐藏密码' : '显示密码'">

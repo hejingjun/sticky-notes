@@ -7,6 +7,36 @@ pub struct SyncPayload {
     pub notes: Vec<db::Note>,
 }
 
+/// Create a directory on the WebDAV server (MKCOL).
+/// Silently succeeds if the directory already exists (405/409 are OK).
+pub async fn ensure_dir(url: &str, user: &str, password: &str) -> Result<(), String> {
+    log::info!("[sync] MKCOL {url}");
+    let client = reqwest::Client::new();
+    let resp = client
+        .request(reqwest::Method::from_bytes(b"MKCOL").unwrap(), url)
+        .basic_auth(user, Some(password))
+        .send()
+        .await
+        .map_err(|e| {
+            let msg = format!("WebDAV MKCOL 失败: {e}");
+            log::error!("[sync] {msg}");
+            msg
+        })?;
+
+    let status = resp.status();
+    log::info!("[sync] MKCOL status: {status}");
+    // 201 Created = success, 405/409 = already exists (safe to ignore)
+    if status == reqwest::StatusCode::CREATED || status == 405 || status == 409 {
+        return Ok(());
+    }
+    if !status.is_success() {
+        let msg = format!("WebDAV MKCOL 返回 {status}");
+        log::error!("[sync] {msg}");
+        return Err(msg);
+    }
+    Ok(())
+}
+
 /// Fetch notes.json from WebDAV, parse, return (payload, etag).
 pub async fn fetch(url: &str, user: &str, password: &str) -> Result<(SyncPayload, String), String> {
     log::info!("[sync] GET {url}");
