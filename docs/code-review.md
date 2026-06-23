@@ -6,13 +6,13 @@
 
 ## 1. 架构层面
 
-### 🔴 1.1 全局可变状态：`static PEN` / `static ONTOP` + unsafe 裸指针传递
+### 🟡 1.1 全局可变状态：`static PEN` / `static ONTOP` + unsafe 裸指针传递
 
 - **文件**: `src-tauri/src/lib.rs:12-13`, `src-tauri/src/win32/subclass.rs:12-22`
 - **当前做法**: 在 `lib.rs` 中定义了两个全局 `static` AtomicBool (`PEN`, `ONTOP`)。`PEN` 的裸指针通过 `static mut PEN_PTR: *const AtomicBool` 传递给 Win32 子类化回调。
-- **问题**: 全局可变状态使得测试不可能，且破坏了 Tauri 的状态管理模式（所有其他状态都通过 `.manage()` 注入）。`unsafe` 裸指针传递在重构时极易出错（如果 PEN 的内存地址改变而忘记更新指针，会导致 use-after-free 或读取垃圾数据）。
-- **建议**: 将 `PEN` 和 `ONTOP` 放入一个 `AppState` 结构体，通过 `tauri::State` 管理。对于子类化回调，使用 `SetWindowSubclass` 的 `dwRefData` 参数传递一个 `Arc<AtomicBool>` 的堆分配指针，避免 `static mut`。
-- **为什么更好**: 消除 unsafe 代码，状态生命周期由 Tauri 管理，可测试。
+- **问题**: 全局可变状态使得测试不可能，且破坏了 Tauri 的状态管理模式（所有其他状态都通过 `.manage()` 注入）。`unsafe` 裸指针传递在重构时极易出错。
+- **建议**: 将 `PEN` 和 `ONTOP` 放入一个 `AppState` 结构体，通过 `tauri::State` 管理。对于子类化回调，使用 `SetWindowSubclass` 的 `dwRefData` 参数传递一个 `Arc<AtomicBool>` 的堆分配指针。
+- **决议**: **经讨论降级为 🟡，推迟到下个迭代。** dwRefData 方案涉及 Win32 子类化核心路径，当前方案经过多轮调试才稳定（CHANGELOG #19 记录了从 Raw WndProc 到 SetWindowSubclass 的艰难迁移）。在无测试覆盖时动这条路径风险过高。
 
 ### 🔴 1.2 `write_file` 命令是任意文件写入后门
 
@@ -29,13 +29,13 @@
 - **建议**: 使用 OS 原生凭据存储 — 在 Windows 上使用 `Credential Manager` API（通过 `windows-sys` 的 `Win32_Security_Credentials`），在 macOS 上使用 Keychain，在 Linux 上使用 `secret-service`。或者至少用 `tauri-plugin-store` 的加密能力。
 - **为什么更好**: 密码不应该以明文存储在磁盘上。
 
-### 🟡 1.4 单例 `useNotes` composable — 隐藏的全局状态
+### 🟢 1.4 单例 `useNotes` composable — 隐藏的全局状态
 
 - **文件**: `src/composables/useNotes.ts:6`
 - **当前做法**: `const notes = ref<Note[]>([])` 定义在模块顶层，`useNotes()` 返回对同一个 ref 的引用。
 - **问题**: 虽然对当前单窗口应用可行，但这是隐式的全局状态。任何调用 `useNotes()` 的地方都共享同一个引用。如果将来需要多窗口，会导致状态不同步。
-- **建议**: 将 ref 移入 `useNotes()` 函数内部，使用 Vue 的 `provide`/`inject` 或简单的 prop drilling（目前已经在做）。
-- **为什么更好**: 显式状态所有权，不会给未来的多窗口支持埋坑。
+- **建议**: 将 ref 移入 `useNotes()` 函数内部，使用 Vue 的 `provide`/`inject` 或简单的 prop drilling。
+- **决议**: **跳过。** 当前是单窗口应用，模块级单例是有意为之的设计模式。等将来需要多窗口时再重构。
 
 ### 🟡 1.5 `check_reminders` 全表扫描
 
