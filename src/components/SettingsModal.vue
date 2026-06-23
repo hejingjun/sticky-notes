@@ -111,7 +111,13 @@ async function doSync() {
     const msg = await invoke<string>("sync_notes");
     syncStatus.value = msg;
   } catch (e) {
-    error.value = String(e);
+    const errStr = String(e);
+    // Only treat it as failure if it's NOT 404/empty-remote (which is fine)
+    if (errStr.includes("404") || errStr.includes("远程文件不存在")) {
+      syncStatus.value = "首次同步（远程无数据）";
+      return;
+    }
+    error.value = errStr;
     syncStatus.value = "同步失败";
   } finally {
     syncing.value = false;

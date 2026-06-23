@@ -54,8 +54,10 @@ pub async fn fetch(url: &str, user: &str, password: &str) -> Result<(SyncPayload
 
     let status = resp.status();
     log::info!("[sync] GET status: {status}");
+    // MKCOL handles directory creation; 404 on GET at file path
+    // means first sync — return empty remote, not an error.
     if status == reqwest::StatusCode::NOT_FOUND {
-        log::info!("[sync] 远程文件不存在，视为空远程");
+        log::info!("[sync] 远程文件不存在（首次同步），视为空远程");
         return Ok((SyncPayload { notes: vec![] }, String::new()));
     }
     if !status.is_success() {
