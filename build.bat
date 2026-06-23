@@ -20,7 +20,14 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo  Step 2/3: Building frontend + Rust backend...
+echo  Step 2/4: Cleaning old dist...
+del /f /q "dist\sticky-notes.exe" 2>nul
+if exist "dist\sticky-notes.exe" (
+    echo [WARN] Could not delete dist/sticky-notes.exe, try again...
+    del /f /q "dist\sticky-notes.exe" 2>nul
+)
+
+echo  Step 3/4: Building frontend + Rust backend...
 call pnpm tauri build
 if %errorlevel% neq 0 (
     echo [ERROR] tauri build failed
@@ -28,7 +35,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo  Step 3/3: Copying to dist...
+echo  Step 4/4: Copying to dist...
 copy /y "src-tauri\target\release\sticky-notes.exe" "dist\sticky-notes.exe" >nul
 
 echo.
