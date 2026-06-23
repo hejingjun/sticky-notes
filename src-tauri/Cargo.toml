@@ -8,7 +8,7 @@ ProductName = "Sticky Notes"
 FileDescription = "Desktop Sticky Notes"
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
