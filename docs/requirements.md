@@ -36,8 +36,10 @@ A Windows desktop sticky-notes / todo app. Glass UI, deep system integration, lo
 |----|---------|-------------|
 | F17 | WebDAV sync | Nutstore/Synology/Nextcloud, ETag lock, entity LWW merge |
 | F18 | Due date + reminder | Set deadline, notification popup |
-| F19 | Export | Excel/CSV |
-| F20 | Search/filter | Keyword, color, status |
+| F19 | Export | CSV with trajectory fields (status, type, duration) |
+| F20 | Search/filter | Keyword (title + subtasks), color |
+| F21 | Todo/Done tabs | Switchable views, Done grouped by date |
+| F22 | Completion cascade | Completing parent auto-completes all subtasks |
 
 ## Non-functional
 

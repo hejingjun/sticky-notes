@@ -41,7 +41,6 @@ WM_NCHITTEST approach abandoned — incompatible with WebView2 child HWND.
 interface Note {
   id: string;            // UUID
   title: string;
-  content: string;
   parentId: string | null;
   order: string;         // Base62 fractional index (max 32 bytes)
   completed: boolean;
@@ -53,6 +52,7 @@ interface Note {
   conflictId: string | null;
   dueDate: number | null;
   remindAt: number | null;
+  completedAt: number | null; // completion timestamp
 }
 ```
 

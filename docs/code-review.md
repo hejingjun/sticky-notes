@@ -14,13 +14,14 @@
 - **建议**: 将 `PEN` 和 `ONTOP` 放入一个 `AppState` 结构体，通过 `tauri::State` 管理。对于子类化回调，使用 `SetWindowSubclass` 的 `dwRefData` 参数传递一个 `Arc<AtomicBool>` 的堆分配指针。
 - **决议**: **经讨论降级为 🟡，推迟到下个迭代。** dwRefData 方案涉及 Win32 子类化核心路径，当前方案经过多轮调试才稳定（CHANGELOG #19 记录了从 Raw WndProc 到 SetWindowSubclass 的艰难迁移）。在无测试覆盖时动这条路径风险过高。
 
-### 🔴 1.2 `write_file` 命令是任意文件写入后门
+### 🔴 1.2 `write_file` 命令是任意文件写入后门 — **已修复**
 
 - **文件**: `src-tauri/src/commands.rs:62-64`, `src-tauri/capabilities/default.json:14-18`
 - **当前做法**: 前端可以调用 `invoke("write_file", { path, contents })` 写入任意路径，capability 授予了 `fs:allow-write` scope `**`。
 - **问题**: 前端代码中的任何 XSS 或依赖注入漏洞都可能导致攻击者写入任意文件（如覆盖 `~/.bashrc` 或启动目录中的 exe）。CSV 导出不需要一个通用的文件写入命令。
 - **建议**: 删除 `write_file` 命令。在 CSV 导出场景中，要么使用 `tauri-plugin-dialog` 的 save + `tauri-plugin-fs` 的 scoped write，要么让 Rust 端直接使用 dialog 插件返回的路径写入。
 - **为什么更好**: 关闭一个提权路径，遵循最小权限原则。
+- **修复**: 已删除 `write_file` 命令，改用 `@tauri-apps/plugin-fs` 的 `writeTextFile`。capabilities 改为 `fs:allow-write-text-file`。
 
 ### 🟡 1.3 WebDAV 密码明文存储
 
@@ -37,7 +38,7 @@
 - **建议**: 将 ref 移入 `useNotes()` 函数内部，使用 Vue 的 `provide`/`inject` 或简单的 prop drilling。
 - **决议**: **跳过。** 当前是单窗口应用，模块级单例是有意为之的设计模式。等将来需要多窗口时再重构。
 
-### 🟡 1.5 `check_reminders` 全表扫描
+### 🟡 1.5 `check_reminders` 全表扫描 — **已修复**
 
 - **文件**: `src-tauri/src/commands.rs:42-59`
 - **当前做法**: 加载所有未删除笔记到内存，遍历过滤出符合提醒条件的。
@@ -49,7 +50,7 @@
 
 ## 2. 代码实现
 
-### 🔴 2.1 事件监听器泄漏
+### 🔴 2.1 事件监听器泄漏 — **已修复**
 
 - **文件**: `src/App.vue:42`
 - **当前做法**: 第 29 行 `unlistenPen = await listen("penetrate-changed", ...)` 注册了穿透监听器。第 41 行 `const unload = await listen("notes-reloaded", ...)` 创建了重载监听器。第 42 行 `unlistenPen = unload` **覆盖**了 `unlistenPen` 变量。
@@ -62,7 +63,7 @@
   ```
 - **为什么更好**: 防止内存泄漏和重复事件监听。
 
-### 🔴 2.2 CSV 导出存在 CSV 注入漏洞
+### 🔴 2.2 CSV 导出存在 CSV 注入漏洞 — **已修复**
 
 - **文件**: `src-tauri/src/commands.rs:67-85`
 - **当前做法**: 手动拼接 CSV 字符串，只转义双引号。
@@ -70,7 +71,7 @@
 - **建议**: 对于以 `=`、`+`、`-`、`@` 开头的字段，在前面加单引号前缀 `'`，或使用 `csv` crate（`cargo add csv`）处理所有转义。
 - **为什么更好**: 消除 CSV 注入风险。
 
-### 🔴 2.3 数据库行访问使用位置索引（`SELECT *` + `row.get(N)`）
+### 🔴 2.3 数据库行访问使用位置索引（`SELECT *` + `row.get(N)`） — **已修复**
 
 - **文件**: `src-tauri/src/db.rs:48-62`
 - **当前做法**: `SELECT * FROM notes` 然后 `row.get(0)` 到 `row.get(13)` 按位置读取。
@@ -93,7 +94,7 @@
 - **建议**: 旧快捷键解析失败时应降级处理 — 记录警告但继续注册新快捷键，或者先尝试反注册已知的旧快捷键再注册新的。
 - **为什么更好**: 健壮性：一个损坏的配置不应该阻止用户修复它。
 
-### 🟡 2.6 `SettingsManager` 每个字段更新都全量写盘
+### 🟡 2.6 `SettingsManager` 每个字段更新都全量写盘 — **已修复**
 
 - **文件**: `src-tauri/src/shortcuts.rs:49-74`
 - **当前做法**: 5 个不同的 update 方法 (`update_penetrate`, `update_auto_purge`, `update_opacity`, `update_webdav`, `update_theme`)，每个方法都立即执行 `std::fs::write`。
@@ -101,7 +102,7 @@
 - **建议**: 抽取一个 `save()` 私有方法，所有 update 方法调用它；或者使用 `Drop` 实现延迟写盘。
 - **为什么更好**: 减少重复代码，可加 debounce 逻辑。
 
-### 🟡 2.7 `init_db` 使用 `unwrap()` 会 panic
+### 🟡 2.7 `init_db` 使用 `unwrap()` 会 panic — **已修复**
 
 - **文件**: `src-tauri/src/lib.rs:236`
 - **当前做法**: `db::init_db(db_path.to_str().unwrap()).expect("DB init failed")`
@@ -117,7 +118,7 @@
 - **建议**: 要么正确实现基于 ETag 的增量同步（用 `If-None-Match` 避免不必要的全量下载），要么删除无用的 etag 文件写入逻辑。
 - **为什么更好**: 代码要么有用要么删除，半成品逻辑会误导未来的维护者。
 
-### 🟢 2.9 多处静默吞错误
+### 🟢 2.9 多处静默吞错误 — **已修复**
 
 - **文件**: 多处
   - `src-tauri/src/lib.rs:234`: `create_dir_all(...).ok()` — 目录创建失败静默忽略
@@ -127,7 +128,7 @@
   - `src-tauri/src/sync/mod.rs:33`: `.unwrap_or("")` — ETag header 缺失时使用空字符串
 - **建议**: 至少记录日志（`eprintln!`/`log::warn!`/`console.warn`），对关键操作（如 etag 写入失败）应向用户反馈。
 
-### 🟢 2.10 前端 `onMounted` 使用了 `async` 但没有错误处理
+### 🟢 2.10 前端 `onMounted` 使用了 `async` 但没有错误处理 — **已修复**
 
 - **文件**: `src/App.vue:26-43`
 - **当前做法**: `onMounted(async () => { ... })` 中有多个 `await` 调用，如果 `get_penetrate`/`get_ontop`/`get_settings` 任何一个抛异常，后续的 `listen` 都不会注册。但整个回调外面没有 try-catch。
@@ -184,14 +185,14 @@
 
 ## 4. 构建与工程化
 
-### 🔴 4.1 CSP 设为 null — 安全策略完全禁用
+### 🔴 4.1 CSP 设为 null — 安全策略完全禁用 — **已修复**
 
 - **文件**: `src-tauri/tauri.conf.json:28`
 - **当前做法**: `"security": { "csp": null }`
 - **问题**: 禁用 Content Security Policy 意味着任何注入的脚本都可以自由执行。这是一个安全底线被移除。即使 Tauri app 不直接面对 Web，如果加载了不受信任的内容或存在 XSS（比如 note 内容渲染），后果严重。
 - **建议**: 设置最小权限的 CSP，如 `"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"`。
 
-### 🔴 4.2 `tray_icon.rs` — 132 行不可维护的硬编码像素数组
+### 🔴 4.2 `tray_icon.rs` — 132 行不可维护的硬编码像素数组 — **已修复**
 
 - **文件**: `src-tauri/src/tray_icon.rs`
 - **当前做法**: 用 `vec![207,206,206,255,255,0,0,0,...]` 硬编码了 32×32 RGBA 像素数据（4096 字节 = 132 行代码）。
@@ -247,7 +248,7 @@
 - **建议**: 使用 `tauri-plugin-window-state` 插件。一行 `.plugin(tauri_plugin_window_state::Builder::default().build())` 替代全部 40 行。
 - **为什么更好**: 内置去抖动、窗口最大化/最小化状态保存、边界处理、跨平台兼容。
 
-### 🟡 5.2 重复的 `SystemTime::now()` 时间戳计算
+### 🟡 5.2 重复的 `SystemTime::now()` 时间戳计算 — **已修复**
 
 - **文件**: `src-tauri/src/commands.rs:23-26, 33-37, 44-47`
 - **当前做法**: 三处几乎完全相同的代码块计算当前 epoch millis：
@@ -260,7 +261,7 @@
 - **建议**: 在 `commands.rs` 中定义一个 `fn now_ms() -> i64` 辅助函数。
 - **为什么更好**: DRY 原则，一行调用替代 4 行。
 
-### 🟡 5.3 `shortcuts.rs` 的 N×代码重复
+### 🟡 5.3 `shortcuts.rs` 的 N×代码重复 — **已修复**
 
 - **文件**: `src-tauri/src/shortcuts.rs:49-74`
 - **当前做法**: 5 个 update 方法，每个方法都是 `self.config.X = value; let _ = std::fs::write(...)`。
@@ -296,7 +297,7 @@
   ```
 - **为什么更好**: 添加新主题只需设置 3 个变量，而不是复制 6 行代码。
 
-### 🟢 5.6 `check_reminders` 可以用 SQL 完成全部过滤
+### 🟢 5.6 `check_reminders` 可以用 SQL 完成全部过滤 — **已修复**
 
 - **文件**: `src-tauri/src/commands.rs:42-59`
 - **当前做法**: 加载全部笔记，在 Rust 中遍历过滤。
@@ -306,35 +307,34 @@
 
 ## 汇总统计
 
-| 严重程度 | 数量 | 关键项 |
-|---------|------|--------|
-| 🔴 严重 | 6 | 监听器泄漏、CSP 禁用、CSV 注入、硬编码图标、列位置访问、任意文件写入 |
-| 🟡 中等 | 16 | 密码明文、ETag 逻辑、写盘风暴、测试缺失、重复代码、WAL 模式等 |
-| 🟢 轻微 | 6 | 错误静默、CSS 重复、prop drilling 等 |
+| 严重程度 | 数量 | 已修复 | 关键项 |
+|---------|------|--------|--------|
+| 🔴 严重 | 6 | 5 | 监听器泄漏✓、CSP✓、CSV注入✓、图标✓、列访问✓、任意文件写入✓ |
+| 🟡 中等 | 16 | 5 | 密码明文、ETag逻辑、写盘风暴、测试缺失、WAL模式等 |
+| 🟢 轻微 | 6 | 4 | 错误静默✓、CSS重复、prop drilling等 |
 
 ---
 
 ## 建议修复优先级
 
-1. **立即修复** (🔴):
-   - App.vue:42 事件监听器泄漏（1 行改动）
-   - tauri.conf.json:28 CSP 设为具体值
-   - commands.rs:62-64 删除 `write_file` 命令，改用 dialog + fs plugin
-   - tray_icon.rs 用 `include_bytes!` 替代硬编码数组
-
-2. **本迭代修复** (🔴+🟡):
-   - db.rs:52-61 列名替代位置索引
-   - commands.rs:77 添加 CSV 注入防护
+1. **已修复** ✅:
+   - App.vue 事件监听器泄漏 — 新增 `unlistenReload` 变量
+   - tauri.conf.json CSP 设为具体值
+   - commands.rs 删除 `write_file` 命令，改用 dialog + fs plugin
+   - tray_icon.rs 改为程序化 RGBA 生成
+   - db.rs 命名列替代位置索引
+   - commands.rs CSV 注入防护 (`csv_escape`)
    - shortcuts.rs 提取 `save()` 方法
    - 添加 `now_ms()` 辅助函数
-   - lib.rs:236 unwrap → 友好错误处理
+   - lib.rs `unwrap` → `to_string_lossy()`
+   - env_logger 日志基础设施（输出到 `%APPDATA%/sticky-notes/app.log`）
 
-3. **下个迭代** (🟡):
+2. **下个迭代** (🟡):
    - 替换 `tauri-plugin-window-state`
    - WAL 模式、reqwest Client 复用
    - 基本测试覆盖（至少 merge + midOrder）
 
-4. **长期** (🟢):
+3. **长期** (🟢):
    - CSS 自定义属性重构
    - 数据库迁移框架
    - WebDAV 密码加密存储

@@ -1,7 +1,7 @@
 # Sticky Notes — 项目总结报告
 
-> 文档版本: 1.0  
-> 最后更新: 2026-06-23  
+> 文档版本: 1.1  
+> 最后更新: 2026-06-26  
 > 项目路径: `D:\Codex_Work\01 桌面便签开发`
 
 ---
@@ -97,7 +97,7 @@ Sticky Notes 是一个 Windows 桌面便签 / Todo 应用。目标是做一款**
 
 | 功能 | 说明 |
 |------|------|
-| 便签 CRUD | 创建、编辑、删除，标题 + 内容 |
+| 便签 CRUD | 创建、编辑、删除，仅标题 |
 | Todo 勾选 | 点击复选框标记完成/未完成，划掉文字 |
 | 毛玻璃窗口 | 无标题栏、圆角、backdrop-filter blur（32px） |
 | Win+D 生存 | 窗口嵌入桌面层（Progman/WorkerW），不被 Win+D 隐藏 |
@@ -123,13 +123,25 @@ Sticky Notes 是一个 Windows 桌面便签 / Todo 应用。目标是做一款**
 
 | 功能 | 说明 |
 |------|------|
-| 搜索/筛选 | 关键词搜索标题+内容+子任务，颜色筛选 |
-| 导出 CSV | UTF-8 BOM 头部，CSV 保存对话框 |
+| 搜索/筛选 | 关键词搜索标题+子任务，颜色筛选 |
+| 导出 CSV | UTF-8 BOM，含状态/类型/耗时等轨迹字段 |
 | 截止日期 + 提醒 | datetime-local 选择器，逾期标记，30 秒轮询弹窗 |
-| WebDAV 同步 | 拉取/推送/ETag 乐观锁/实体级 LWW 合并/冲突标记 |
+| WebDAV 同步 | 上传/下载分离，上传覆盖远程、下载覆盖本地，ETag 乐观锁，保留双向合并模式 |
 | 主题切换 | 松绿 / 雾蓝 / 暖灰 三套毛玻璃配色 |
 | 透明度调节 | 滑块 10%-90%，编辑时自动加深 |
 | 快捷键自定义 | 设置面板按键捕获，动态重注册 |
+
+### P3 — Todo/Done 体系（全部完成）
+
+| 功能 | 说明 |
+|------|------|
+| Todo/Done 标签页 | 待办/已完成切换，状态 localStorage 持久化 |
+| 已完成任务按日期分组 | Done 视图按完成时间分组（今天/昨天/日期/更早） |
+| 主任务级联完成 | 勾选主任务时自动完成所有子任务；取消完成仅影响主任务 |
+| completed_at 时间戳 | 新增字段，记录完成时刻，用于日期分组和 CSV 耗时计算 |
+| 移除 content 字段 | UI 和数据模型全面移除 content，仅保留标题 |
+| CSV 导出优化 | 新增状态/类型/父任务ID/完成时间/耗时(分钟)等列 |
+| WebDAV 标签通用化 | 设置界面移除「坚果云」字样，适配所有 WebDAV 供应商 |
 
 ### 系统集成特性
 
@@ -224,14 +236,16 @@ if v {  // 开启置顶
 **三个核心函数（`sync/mod.rs`）：**
 
 - **`fetch(url, user, password)`:** GET -> 解析 `SyncPayload { notes: Vec<Note> }` -> 返回 `(payload, etag)`
-- **`push(url, user, password, notes, current_etag)`:** PUT + `If-Match: <etag>` -> 乐观锁。412 -> 冲突
+- **`push(url, user, password, notes, current_etag)`:** PUT + `If-Match: <etag>` -> 乐观锁。412 -> 冲突。返回新 ETag
 - **`merge(local, remote)`:** Entity-level LWW。相同 `id`：取 `updated_at` 较大的。相等但内容不同 -> `has_conflict = true`（保留本地）。按 `order` 排序
 
-**同步流程（`lib.rs::sync_notes`）：**
-1. 读取设置中的 WebDAV 地址/用户名/密码
-2. 读取本地 ETag 缓存（`.sync_etag` 文件）
-3. 拉取远程 -> 合并 -> 写本地 DB -> 推远程 -> 保存新 ETag
-4. 向前端发送 `"notes-reloaded"` 事件触发重新加载
+**同步命令（`lib.rs`）：**
+
+- **`sync_notes`（保留，双向合并）：** 拉取远程 -> 合并 -> 写本地 DB -> 推远程 -> 保存新 ETag
+- **`sync_push`（单向上传）：** 读本地 DB -> 推送到远程（覆盖远程）-> 保存新 ETag。不修改本地数据库
+- **`sync_pull`（单向下载）：** 拉取远程 -> 写入本地 DB（覆盖本地）-> 保存 ETag。不推送到远程
+
+**设计决策：** 双向合并（LWW）在某些场景会导致已完成任务被远程旧版本覆盖而回退为未完成。拆分为独立的上传/下载让用户明确控制数据流向，避免状态回退。
 
 **注意：** `sync_notes` 是 `async fn`，`state.0.lock()` 返回的 `MutexGuard` 不能跨 `.await` 持有。必须缩放在 block 内：
 ```rust
@@ -269,7 +283,6 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: isize) -> BOOL {
 interface Note {
   id: string;              // crypto.randomUUID()
   title: string;
-  content: string;
   parent_id: string|null;  // 子任务的父 ID
   order: string;           // 排序键（10 字符 hex）
   completed: boolean;
@@ -281,6 +294,7 @@ interface Note {
   conflict_id: string|null; // 用于同步冲突标记
   due_date: number|null;   // 截止日期时间戳
   remind_at: number|null;  // 提醒时间戳
+  completed_at: number|null; // 完成时间戳（用于 Done 视图分组）
 }
 ```
 
@@ -290,7 +304,6 @@ interface Note {
 CREATE TABLE IF NOT EXISTS notes (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL DEFAULT '',
-    content TEXT NOT NULL DEFAULT '',
     parent_id TEXT,
     [order] TEXT NOT NULL DEFAULT 'a0',
     completed INTEGER NOT NULL DEFAULT 0,
@@ -301,7 +314,8 @@ CREATE TABLE IF NOT EXISTS notes (
     deleted_at INTEGER,
     conflict_id TEXT,
     due_date INTEGER,
-    remind_at INTEGER
+    remind_at INTEGER,
+    completed_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_order ON notes([order]);
 CREATE INDEX IF NOT EXISTS idx_parent ON notes(parent_id);
@@ -371,6 +385,25 @@ CREATE INDEX IF NOT EXISTS idx_updated ON notes(updated_at);
 | 22 | PowerShell `Out-File` 输出 UTF-8 BOM，导致 Rust 编译 JSON 解析失败 | PowerShell 默认编码带 BOM | 使用 `File.WriteAllText` 或 `-Encoding utf8` 参数 |
 | 23 | `Rc.exe` 编译资源失败 | 中文字符编码问题 | 项目名用纯英文 "sticky-notes" |
 
+### 6.5 代码审查修复（2026-06-24）
+
+| # | 问题 | 根因 | 修复方案 |
+|---|------|------|----------|
+| 24 | `write_file` 任意文件写入后门 | 前端可调用写入任意路径 | 删除命令，改用 `writeTextFile` plugin |
+| 25 | CSV 注入漏洞 (CWE-1236) | 未处理 `=+-@` 开头字段 | `csv_escape()` 加单引号前缀 |
+| 26 | `SELECT *` + 位置索引读取 | 列重排会导致数据错位 | 改为命名列 `row.get("id")` |
+| 27 | 事件监听器泄漏 | `unlistenPen` 被 `unload` 覆盖 | 新增 `unlistenReload` 变量 |
+| 28 | `check_reminders` 全表扫描 | 加载所有笔记到内存过滤 | 改为 SQL WHERE 子句过滤 |
+| 29 | `now_ms()` 重复代码 | 三处相同 SystemTime 计算 | 提取 `now_ms()` 辅助函数 |
+| 30 | `set_shortcut` 旧键解析失败整体失败 | 损坏配置阻止修复 | 降级处理，记录日志继续 |
+| 31 | `init_db` 中 `to_str().unwrap()` panic | 非 UTF-8 路径 | 改用 `to_string_lossy()` |
+| 32 | 托盘图标 PNG 损坏（110 字节空白） | 源文件损坏 | 改为程序化 RGBA 生成 |
+| 33 | WebDAV 同步 405 错误 | GET/PUT 发到目录路径 | `ensure_dir()` MKCOL + 文件路径构建 |
+| 34 | CSP 设为 null | 安全策略完全禁用 | 设为具体 CSP 策略 |
+| 35 | `fs:allow-write` scope `**` | 权限过大 | 改为 `fs:allow-write-text-file` |
+| 36 | 同步逻辑导致任务状态回退 | 双向合并（LWW）会把已完成的任务重新拉回未完成 | 拆分 `sync_push`（上传覆盖远程）和 `sync_pull`（下载覆盖本地），设置面板改为独立的「上传」和「下载」按钮 |
+| 37 | 快捷键修改后底部提示不更新 | `Ctrl+Alt+Shift+P` 硬编码在 App.vue 模板中 | 新增 `shortcut` ref，`onMounted` 时从 `get_settings` 读取，模板和 title 均使用动态值 |
+
 ---
 
 ## 七、关键文件逐文件说明
@@ -379,12 +412,14 @@ CREATE INDEX IF NOT EXISTS idx_updated ON notes(updated_at);
 
 #### `src/App.vue` — 根组件
 
-- `onMounted` 加载穿透状态、置顶状态、主题
+- `onMounted` 加载穿透状态、置顶状态、主题、快捷键配置
+- Todo/Done 标签栏（`activeTab`，localStorage 持久化）
 - `setInterval(checkReminders, 30000)` 轮询提醒
 - `listen("notes-reloaded")` 监听 WebDAV 同步完成后的重新加载
-- `exportNotes()` 动态 import dialog + write_file 来保存文件
+- `exportNotes()` 动态 import dialog + writeTextFile 保存文件
 - `watch(isEditing)` 切换 `body.editing` 类控制编辑时背景加深
 - 提醒弹窗：轮询到逾期/提醒便签时显示顶部 toast，点击「知道了」关闭
+- `shortcut` ref 从 `get_settings` 读取，底部提示和穿透按钮 title 均使用动态值
 
 #### `src/composables/useNotes.ts` — 数据核心
 
@@ -393,6 +428,7 @@ CREATE INDEX IF NOT EXISTS idx_updated ON notes(updated_at);
 - `add()` 新增顶层便签，`addSubtask()` 新增子任务
 - `update()` 更新触发响应式 + 排序
 - `reorder(id, beforeId)` 拖拽排序：尝试中点插入，失败则全量重排
+- `toggleComplete(note)` 切换完成状态并设置 `completed_at`，主任务完成时级联完成所有子任务
 - **注意：** `update()` 和 `reorder()` 中重新排序时不要创建新数组去替换 `notes.value` 后丢失已展开的编辑状态。正确做法是更新 `copy[idx]` 再整体替换。
 
 #### `src/components/NoteCard.vue` — 最复杂的组件
@@ -401,6 +437,7 @@ CREATE INDEX IF NOT EXISTS idx_updated ON notes(updated_at);
 - 单个便签编辑（`editing` ref）和子任务编辑（`subEditingId` ref）独立
 - 编辑时 blur 自动保存（`onBlur` 调用 `save`）
 - 按钮用 `@mousedown.prevent` 避免触发表单 blur
+- 仅编辑标题（content 字段已移除），Enter 键快速保存
 
 **子任务：**
 - 从 `allNotes` prop 中 filter `parent_id === note.id`
@@ -422,7 +459,7 @@ CREATE INDEX IF NOT EXISTS idx_updated ON notes(updated_at);
 
 - 快捷键：点击进入监听模式 -> 键盘按下时 `formatShortcut` 生成 accelerator 字符串
 - 透明度：拖拽时实时更新 CSS 变量 `--glass-opacity`，松开时保存到配置
-- WebDAV：URL/用户/密码输入 + 保存配置 + 立即同步按钮 + 状态反馈
+- WebDAV：通用 WebDAV URL/账号/密码输入 + 密码显示/隐藏切换 + 保存配置 + 独立的「上传」和「下载」按钮（分别调用 `sync_push` 和 `sync_pull`）
 - 主题：点击切换、更新 `body.theme-*` 类、持久化到配置
 - 开机自启、30天清理：开关按钮
 
@@ -492,6 +529,7 @@ pnpm tauri build
 - `%APPDATA%/sticky-notes/shortcuts.json` — 设置
 - `%APPDATA%/sticky-notes/window.json` — 窗口位置
 - `%APPDATA%/sticky-notes/.sync_etag` — WebDAV 同步 ETag 缓存
+- `%APPDATA%/sticky-notes/app.log` — 运行日志（env_logger，INFO 级别）
 
 ### 数据模型变更注意事项
 
@@ -517,17 +555,18 @@ pnpm tauri build
 ## 十、Git Commit 时间线
 
 ```
+dbecf09 fix: show '首次同步' instead of error on first-time sync
+fa3902f fix: WebDAV sync 405 error — use MKCOL for directory, PUT/GET file paths
+eeb52ce chore: allow git tag command in Claude settings
+2015895 chore: allow shell navigation commands in Claude settings
+dc27af8 feat: add logging infrastructure and password visibility toggle
+45d5f25 chore: allow tasklist command in Claude settings
+3d73332 fix: redesign tray icon as bold orange rounded-square with white checkmark
+e3ed9ed fix: replace PNG-based tray icon with procedural hardcoded RGBA bitmap
+9451863 chore: fix build.bat step numbering (1/3 → 1/4)
+8a85248 chore: update permissions and mark resolved code-review items with final verdict
 d1369d5 build: fix build.bat permission error by deleting stale exe before tauri build
 b5e3f79 build: fix production binary not embedding frontend, update build.bat
-bc363c6 chore: update allowed commands in Claude settings
-d317717 chore: update permitted commands in Claude settings
-0492a1b chore: add build.bat for one-click production build
-75e08a5 chore: ignore build artifacts in dist/ (frontend + binary)
-044f91f fix: suppress console window on release build
-b791852 build: production bundle with embedded frontend assets
-723cf04 feat: custom app icon and tray icon from user image, fix sub-task due-date picker
-f7c88e8 chore: allow git commit and status commands in Claude settings
-b54ecd7 Initial commit: Sticky Notes desktop app
 ```
 
 ---
