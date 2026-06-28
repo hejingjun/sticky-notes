@@ -115,6 +115,11 @@ sticky-notes/
 └── package.json
 ```
 
+## 致谢
+
+- 本项目使用 [Claude Code](https://claude.ai/code) 作为 AI 辅助开发工具
+- 设计参考 [xiajingren/xhznl-todo-list](https://github.com/xiajingren/xhznl-todo-list)
+
 ## 许可证
 
 MIT
