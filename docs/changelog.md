@@ -103,7 +103,7 @@ Sticky Notes 是一个 Windows 桌面便签 / Todo 应用。目标是做一款**
 | Win+D 生存 | 窗口嵌入桌面层（Progman/WorkerW），不被 Win+D 隐藏 |
 | 鼠标穿透 | `set_ignore_cursor_events` + 全局快捷键 Ctrl+Alt+Shift+P |
 | 拖拽移动窗口 | 顶部 handle `@mousedown -> start_dragging()` |
-| 右键菜单 | 新建/置顶/穿透/设置/导出/隐藏到托盘 |
+| 右键菜单 | 新建/置顶/设置/导出/隐藏到托盘 |
 | 本地持久化 | SQLite，`notes.db` 在 `%APPDATA%/sticky-notes/` |
 
 ### P1 — 重要功能（全部完成）
@@ -174,13 +174,14 @@ Sticky Notes 是一个 Windows 桌面便签 / Todo 应用。目标是做一款**
 **前端的双向同步机制：**
 - 组件挂载时调用 `get_penetrate()` 读取初始状态（不是 `toggle_penetrate()`，后者会翻转状态）
 - `listen("penetrate-changed")` 监听 Rust 端快捷键切换
-- 点击按钮不依赖事件，直接从 `toggle_penetrate()` 返回值更新
+- ~~点击按钮不依赖事件，直接从 `toggle_penetrate()` 返回值更新~~（按钮已移除，仅保留快捷键控制）
 
 **已修复的问题：**
 1. 快捷键不同步 UI — 快捷键回调没发事件到前端。修复：加 `app.emit("penetrate-changed", v)`
 2. `set_focus()` 在 `WS_EX_NOACTIVATE` 下无效 — 快捷键回调里调了 `set_focus()` 但永远失败。修复：移除
 3. 初始状态读取不能调用 `toggle_penetrate` — 这个命令会翻转状态。修复：新增 `get_penetrate()` 只读命令
 4. 按钮点击和快捷键走不同路径 — 统一为 `set_penetrate()` 函数
+5. 穿透按钮点击后自身也穿透，无法点击回来 — 移除按钮，仅保留快捷键控制
 
 ### 4.2 Win+D 桌面嵌入
 

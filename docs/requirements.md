@@ -13,7 +13,7 @@ A Windows desktop sticky-notes / todo app. Glass UI, deep system integration, lo
 | F04 | Win+D survival | WM_SHOWWINDOW guard via SetWindowSubclass |
 | F05 | Mouse click-through | set_ignore_cursor_events + Ctrl+Alt+P fallback |
 | F06 | Drag to move + resize | start_dragging() IPC + resizable edge drags | start_dragging() IPC on handle area |
-| F07 | Right-click menu | New note, toggle penetrate, close |
+| F07 | Right-click menu | New note, toggle on-top, settings, export, hide to tray |
 | F08 | Local persistence | SQLite, survives restart |
 
 ## P1 鈥?Important

@@ -271,7 +271,7 @@
 ### 🟡 5.4 `ContextMenu.vue` 接收 8 个 props，`NoteList.vue` 转发 7 个 events
 
 - **文件**: `src/components/ContextMenu.vue:4`, `src/components/NoteList.vue:8-16`
-- **当前做法**: ContextMenu 有 8 个 props（`onAdd`, `onPen`, `onTop`, `onSettings`, `onExport`, `ontop`, `penetrating`, `onClose`），NoteList 定义了 7 个 emit 事件逐层转发。
+- **当前做法**: ContextMenu 有 6 个 props（`onAdd`, `onTop`, `onSettings`, `onExport`, `ontop`, `onClose`），NoteList 定义了 7 个 emit 事件逐层转发。
 - **问题**: 每增加一个功能就需要修改 3 个文件的 props/emits 声明。这是典型的"prop drilling"和"event bubbling"问题。
 - **建议**: 对于 context menu 的操作，考虑用 `provide`/`inject` 传递一个 `actions` 对象。或者直接用 composable 暴露方法，让深层组件直接调用。
 - **为什么更好**: 减少样板代码，添加新功能只需改 composable。
