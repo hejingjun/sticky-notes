@@ -2,10 +2,10 @@ use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Note {
     pub id: String,
     pub title: String,
-    pub content: String,
     pub parent_id: Option<String>,
     pub order: String,
     pub completed: bool,
@@ -17,6 +17,28 @@ pub struct Note {
     pub conflict_id: Option<String>,
     pub due_date: Option<i64>,
     pub remind_at: Option<i64>,
+    pub completed_at: Option<i64>,
+}
+
+impl Default for Note {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            title: String::new(),
+            parent_id: None,
+            order: String::new(),
+            completed: false,
+            pinned: false,
+            color: "#333333".into(),
+            created_at: 0,
+            updated_at: 0,
+            deleted_at: None,
+            conflict_id: None,
+            due_date: None,
+            remind_at: None,
+            completed_at: None,
+        }
+    }
 }
 
 pub fn init_db(path: &str) -> Result<Connection, Box<dyn std::error::Error>> {
@@ -25,7 +47,6 @@ pub fn init_db(path: &str) -> Result<Connection, Box<dyn std::error::Error>> {
         CREATE TABLE IF NOT EXISTS notes (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL DEFAULT '',
-            content TEXT NOT NULL DEFAULT '',
             parent_id TEXT,
             [order] TEXT NOT NULL DEFAULT 'a0',
             completed INTEGER NOT NULL DEFAULT 0,
@@ -42,20 +63,25 @@ pub fn init_db(path: &str) -> Result<Connection, Box<dyn std::error::Error>> {
         CREATE INDEX IF NOT EXISTS idx_parent ON notes(parent_id);
         CREATE INDEX IF NOT EXISTS idx_updated ON notes(updated_at);
     ")?;
+    // Migration: add completed_at column if missing (safe to run on existing DBs)
+    if let Err(e) = conn.execute("ALTER TABLE notes ADD COLUMN completed_at INTEGER", []) {
+        if !e.to_string().contains("duplicate column") {
+            log::warn!("ALTER TABLE completed_at failed: {e}");
+        }
+    }
     Ok(conn)
 }
 
 pub fn list_notes(conn: &Connection) -> Result<Vec<Note>, Box<dyn std::error::Error>> {
     let mut stmt = conn.prepare(
-        "SELECT id, title, content, parent_id, [order], completed, pinned, color, \
-         created_at, updated_at, deleted_at, conflict_id, due_date, remind_at \
+        "SELECT id, title, parent_id, [order], completed, pinned, color, \
+         created_at, updated_at, deleted_at, conflict_id, due_date, remind_at, completed_at \
          FROM notes WHERE deleted_at IS NULL ORDER BY [order]"
     )?;
     let rows = stmt.query_map([], |row| {
         Ok(Note {
             id: row.get("id")?,
             title: row.get("title")?,
-            content: row.get("content")?,
             parent_id: row.get("parent_id")?,
             order: row.get("order")?,
             completed: row.get("completed")?,
@@ -67,6 +93,7 @@ pub fn list_notes(conn: &Connection) -> Result<Vec<Note>, Box<dyn std::error::Er
             conflict_id: row.get("conflict_id")?,
             due_date: row.get("due_date")?,
             remind_at: row.get("remind_at")?,
+            completed_at: row.get("completed_at")?,
         })
     })?;
     Ok(rows.filter_map(|r| r.ok()).collect())
@@ -74,19 +101,20 @@ pub fn list_notes(conn: &Connection) -> Result<Vec<Note>, Box<dyn std::error::Er
 
 pub fn upsert_note(conn: &Connection, note: &Note) -> Result<(), Box<dyn std::error::Error>> {
     conn.execute(
-        "INSERT INTO notes (id,title,content,parent_id,[order],completed,pinned,color,created_at,updated_at,deleted_at,conflict_id,due_date,remind_at)
+        "INSERT INTO notes (id,title,parent_id,[order],completed,pinned,color,created_at,updated_at,deleted_at,conflict_id,due_date,remind_at,completed_at)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
          ON CONFLICT(id) DO UPDATE SET
-         title=excluded.title, content=excluded.content, parent_id=excluded.parent_id,
+         title=excluded.title, parent_id=excluded.parent_id,
          [order]=excluded.[order], completed=excluded.completed, pinned=excluded.pinned,
          color=excluded.color, updated_at=excluded.updated_at,
          deleted_at=excluded.deleted_at, conflict_id=excluded.conflict_id,
-         due_date=excluded.due_date, remind_at=excluded.remind_at",
+         due_date=excluded.due_date, remind_at=excluded.remind_at,
+         completed_at=excluded.completed_at",
         params![
-            note.id, note.title, note.content, note.parent_id, note.order,
+            note.id, note.title, note.parent_id, note.order,
             note.completed as i32, note.pinned as i32, note.color,
             note.created_at, note.updated_at, note.deleted_at,
-            note.conflict_id, note.due_date, note.remind_at,
+            note.conflict_id, note.due_date, note.remind_at, note.completed_at,
         ],
     )?;
     Ok(())

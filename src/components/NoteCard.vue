@@ -16,20 +16,18 @@ const emit = defineEmits<{
 // Self editing
 const editing = ref(false);
 const editTitle = ref("");
-const editContent = ref("");
 
 watch(editing, (v) => emit("editing", v));
 
 function startEdit() {
   editTitle.value = props.note.title;
-  editContent.value = props.note.content;
   editing.value = true;
 }
 
 function save() {
   editing.value = false;
-  if (editTitle.value !== props.note.title || editContent.value !== props.note.content) {
-    emit("update", { ...props.note, title: editTitle.value, content: editContent.value });
+  if (editTitle.value !== props.note.title) {
+    emit("update", { ...props.note, title: editTitle.value });
   }
 }
 
@@ -44,19 +42,17 @@ function cancel() {
 // Subtask editing (independent from main editing state)
 const subEditingId = ref<string | null>(null);
 const subEditTitle = ref("");
-const subEditContent = ref("");
 
 function startSubEdit(s: Note) {
   subEditingId.value = s.id;
   subEditTitle.value = s.title;
-  subEditContent.value = s.content;
 }
 
 function saveSubEdit(s: Note) {
   if (subEditingId.value !== s.id) return;
   subEditingId.value = null;
-  if (subEditTitle.value !== s.title || subEditContent.value !== s.content) {
-    emit("update", { ...s, title: subEditTitle.value, content: subEditContent.value });
+  if (subEditTitle.value !== s.title) {
+    emit("update", { ...s, title: subEditTitle.value });
   }
 }
 
@@ -169,7 +165,6 @@ function onDrop(e: DragEvent) {
       <div class="info">
         <span class="title-text" :class="{ done: note.completed }">{{ displayTitle }}</span>
         <div class="meta-row">
-          <span v-if="note.content" class="preview">{{ note.content.slice(0, 40) }}</span>
           <span v-if="isOverdue" class="overdue-badge">逾期</span>
           <span v-else-if="dueDateStr" class="due-badge">{{ dueDateStr }}</span>
         </div>
@@ -202,13 +197,7 @@ function onDrop(e: DragEvent) {
         class="edit-title"
         placeholder="标题"
         @keydown.escape="cancel"
-      />
-      <textarea
-        v-model="editContent"
-        class="edit-body"
-        placeholder="内容..."
-        rows="4"
-        @keydown.escape="cancel"
+        @keydown.enter="save"
       />
       <div class="edit-actions">
         <button class="act save" @mousedown.prevent="save">保存</button>
@@ -228,7 +217,6 @@ function onDrop(e: DragEvent) {
           <div class="sub-info" @click="startSubEdit(s)">
             <span class="sub-title" :class="{ done: s.completed }">{{ s.title || '子任务' }}</span>
             <div class="sub-meta-row">
-              <span v-if="s.content" class="sub-preview">{{ s.content.slice(0, 30) }}</span>
               <span v-if="s.due_date && s.due_date < Date.now() && !s.completed" class="overdue-badge">逾期</span>
               <span v-else-if="s.due_date" class="due-badge">{{ new Date(s.due_date).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" }) }}</span>
             </div>
@@ -240,8 +228,7 @@ function onDrop(e: DragEvent) {
 
         <!-- Sub editing -->
         <div v-else class="sub-edit" @blur="saveSubEdit(s)">
-          <input v-model="subEditTitle" class="edit-title" placeholder="子任务标题" @keydown.escape="cancelSubEdit" />
-          <textarea v-model="subEditContent" class="edit-body" placeholder="内容..." rows="2" @keydown.escape="cancelSubEdit" />
+          <input v-model="subEditTitle" class="edit-title" placeholder="子任务标题" @keydown.escape="cancelSubEdit" @keydown.enter="saveSubEdit(s)" />
           <div class="edit-actions">
             <button class="act save" @mousedown.prevent="saveSubEdit(s)">保存</button>
             <button class="act cancel" @mousedown.prevent="cancelSubEdit">取消</button>
@@ -280,10 +267,6 @@ function onDrop(e: DragEvent) {
 .title-text { font-size: 13px; color: rgba(255,255,255,0.9); word-break: break-word; }
 .title-text.done { text-decoration: line-through; color: rgba(255,255,255,0.35); }
 .meta-row { display: flex; align-items: center; gap: 6px; }
-.preview {
-  font-size: 11px; color: rgba(255,255,255,0.4);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;
-}
 .due-badge, .overdue-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; flex-shrink: 0; }
 .due-badge { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.4); }
 .overdue-badge { background: rgba(255,80,80,0.25); color: #ff6b6b; }
@@ -347,12 +330,6 @@ function onDrop(e: DragEvent) {
   border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;
   color: #fff; font-size: 13px; padding: 6px 8px; outline: none;
 }
-.edit-body, .sub-edit .edit-body {
-  width: 100%; background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.15); border-radius: 4px;
-  color: #fff; font-size: 12px; padding: 8px; outline: none;
-  resize: vertical; font-family: inherit;
-}
 .edit-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .act { padding: 3px 12px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; }
 .act.save { background: rgba(74,222,128,0.3); color: #4ade80; }
@@ -372,7 +349,6 @@ function onDrop(e: DragEvent) {
 .sub-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; cursor: pointer; }
 .sub-title { color: rgba(255,255,255,0.75); word-break: break-word; font-size: 12px; }
 .sub-title.done { text-decoration: line-through; color: rgba(255,255,255,0.3); }
-.sub-preview { font-size: 10px; color: rgba(255,255,255,0.3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sub-edit { display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .sub-row .check { width: 16px; height: 16px; font-size: 10px; }
 .sub-row .del { font-size: 14px; }

@@ -96,7 +96,8 @@ pub async fn fetch(url: &str, user: &str, password: &str) -> Result<(SyncPayload
 
 /// PUT notes.json to WebDAV with If-Match for ETag-based locking.
 /// If etag is empty (first push), omit If-Match.
-pub async fn push(url: &str, user: &str, password: &str, notes: &[db::Note], etag: &str) -> Result<(), String> {
+/// Returns the new ETag from the server response.
+pub async fn push(url: &str, user: &str, password: &str, notes: &[db::Note], etag: &str) -> Result<String, String> {
     log::info!("[sync] PUT {url} (笔记数: {}, etag: {etag})", notes.len());
     let payload = SyncPayload {
         notes: notes.to_vec(),
@@ -133,7 +134,13 @@ pub async fn push(url: &str, user: &str, password: &str, notes: &[db::Note], eta
         return Err(msg);
     }
     log::info!("[sync] PUT 成功");
-    Ok(())
+    let new_etag = resp
+        .headers()
+        .get("ETag")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+    Ok(new_etag)
 }
 
 /// Entity-level last-writer-wins merge.
@@ -154,9 +161,9 @@ pub fn merge(local: Vec<db::Note>, remote: Vec<db::Note>) -> (Vec<db::Note>, boo
             if existing.updated_at == n.updated_at {
                 // Same timestamp but different content? Flag conflict
                 if existing.title != n.title
-                    || existing.content != n.content
                     || existing.completed != n.completed
                     || existing.due_date != n.due_date
+                    || existing.completed_at != n.completed_at
                 {
                     log::warn!("[sync] 冲突: 笔记 {} 的本地和远程版本 timestamp 相同但内容不同", n.id);
                     has_conflict = true;

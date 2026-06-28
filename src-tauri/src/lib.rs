@@ -187,10 +187,11 @@ async fn sync_notes(
     }
 
     // 5. Push merged to remote
-    sync::push(&file_url, &user, &password, &merged, &remote_etag).await?;
+    let push_etag = sync::push(&file_url, &user, &password, &merged, &remote_etag).await?;
 
     // 6. Save new etag
-    if let Err(e) = std::fs::write(&etag_path, &remote_etag) {
+    let save_etag = if push_etag.is_empty() { &remote_etag } else { &push_etag };
+    if let Err(e) = std::fs::write(&etag_path, save_etag) {
         log::error!("[sticky-notes] 同步 etag 写入失败: {e}");
     }
 
@@ -202,6 +203,97 @@ async fn sync_notes(
     } else {
         Ok("同步完成".into())
     }
+}
+
+#[tauri::command]
+async fn sync_push(
+    app: tauri::AppHandle,
+    sm: tauri::State<'_, Mutex<shortcuts::SettingsManager>>,
+    state: tauri::State<'_, commands::DbState>,
+) -> Result<String, String> {
+    let (base_url, user, password) = {
+        let mgr = sm.lock().map_err(|e| e.to_string())?;
+        let cfg = mgr.get_config();
+        if cfg.webdav_url.is_empty() {
+            return Err("请先配置 WebDAV 地址".into());
+        }
+        (cfg.webdav_url.clone(), cfg.webdav_user.clone(), cfg.webdav_password.clone())
+    };
+
+    let base = base_url.trim_end_matches('/');
+    let remote_dir = format!("{}/sticky-notes", base);
+    let file_url = format!("{}/notes.json", remote_dir);
+
+    let etag_path = dirs_next::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("sticky-notes")
+        .join(".sync_etag");
+    let local_etag = std::fs::read_to_string(&etag_path).unwrap_or_default();
+
+    sync::ensure_dir(&remote_dir, &user, &password).await?;
+
+    let local_notes = {
+        let conn = state.0.lock().map_err(|e| e.to_string())?;
+        db::list_notes(&conn).map_err(|e| e.to_string())?
+    };
+
+    let push_etag = sync::push(&file_url, &user, &password, &local_notes, &local_etag).await?;
+
+    let save_etag = if push_etag.is_empty() { local_etag } else { push_etag };
+    if let Err(e) = std::fs::write(&etag_path, &save_etag) {
+        log::warn!("[sticky-notes] sync_push etag write failed: {e}");
+    }
+
+    let _ = app.emit("notes-reloaded", ());
+    let msg = format!("已上传 {} 条笔记", local_notes.len());
+    log::info!("[sticky-notes] sync_push done: {}", msg);
+    Ok(msg)
+}
+
+#[tauri::command]
+async fn sync_pull(
+    app: tauri::AppHandle,
+    sm: tauri::State<'_, Mutex<shortcuts::SettingsManager>>,
+    state: tauri::State<'_, commands::DbState>,
+) -> Result<String, String> {
+    let (base_url, user, password) = {
+        let mgr = sm.lock().map_err(|e| e.to_string())?;
+        let cfg = mgr.get_config();
+        if cfg.webdav_url.is_empty() {
+            return Err("请先配置 WebDAV 地址".into());
+        }
+        (cfg.webdav_url.clone(), cfg.webdav_user.clone(), cfg.webdav_password.clone())
+    };
+
+    let base = base_url.trim_end_matches('/');
+    let remote_dir = format!("{}/sticky-notes", base);
+    let file_url = format!("{}/notes.json", remote_dir);
+
+    sync::ensure_dir(&remote_dir, &user, &password).await?;
+
+    let (remote_payload, remote_etag) = sync::fetch(&file_url, &user, &password).await?;
+
+    let remote_count = remote_payload.notes.len();
+    {
+        let conn = state.0.lock().map_err(|e| e.to_string())?;
+        for note in &remote_payload.notes {
+            db::upsert_note(&conn, note).map_err(|e| e.to_string())?;
+        }
+    }
+
+    let etag_path = dirs_next::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("sticky-notes")
+        .join(".sync_etag");
+    if let Some(parent) = etag_path.parent() { let _ = std::fs::create_dir_all(parent); }
+    if let Err(e) = std::fs::write(&etag_path, &remote_etag) {
+        log::warn!("[sticky-notes] sync_pull etag write failed: {e}");
+    }
+
+    let _ = app.emit("notes-reloaded", ());
+    let msg = format!("已下载 {} 条笔记", remote_count);
+    log::info!("[sticky-notes] sync_pull done: {}", msg);
+    Ok(msg)
 }
 
 #[tauri::command]
@@ -280,6 +372,8 @@ pub fn run() {
             set_theme,
             save_webdav,
             sync_notes,
+            sync_push,
+            sync_pull,
             start_drag,
             exit_app,
             hide_to_tray,

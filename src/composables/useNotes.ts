@@ -92,8 +92,22 @@ export function useNotes() {
   }
 
   async function toggleComplete(note: Note) {
-    note.completed = !note.completed;
+    const newCompleted = !note.completed;
+    const now = Date.now();
+    note.completed = newCompleted;
+    note.completed_at = newCompleted ? now : null;
     await update(note);
+    // Cascade to subtasks only when completing (not when un-completing)
+    if (newCompleted && !note.parent_id) {
+      const children = notes.value.filter((n) => n.parent_id === note.id);
+      for (const child of children) {
+        if (!child.completed) {
+          child.completed = true;
+          child.completed_at = now;
+          await update(child);
+        }
+      }
+    }
   }
 
   async function togglePin(note: Note) {

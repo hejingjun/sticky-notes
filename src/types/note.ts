@@ -1,7 +1,6 @@
 export interface Note {
   id: string;
   title: string;
-  content: string;
   parent_id: string | null;
   order: string;
   completed: boolean;
@@ -13,6 +12,7 @@ export interface Note {
   conflict_id: string | null;
   due_date: number | null;
   remind_at: number | null;
+  completed_at: number | null;
 }
 
 export const COLORS = [
@@ -33,7 +33,6 @@ export function newNote(order: string, color = DEFAULT_COLOR): Note {
   return {
     id: crypto.randomUUID(),
     title: "",
-    content: "",
     parent_id: null,
     order,
     completed: false,
@@ -45,5 +44,6 @@ export function newNote(order: string, color = DEFAULT_COLOR): Note {
     conflict_id: null,
     due_date: null,
     remind_at: null,
+    completed_at: null,
   };
 }

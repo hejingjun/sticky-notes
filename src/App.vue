@@ -14,7 +14,9 @@ const penetrating = ref(false);
 const ontop = ref(true);
 const showSettings = ref(false);
 const isEditing = ref(false);
+const activeTab = ref<"todo" | "done">((localStorage.getItem("activeTab") as "todo" | "done") || "todo");
 const reminders = ref<Array<{ id: string; title: string }>>([]);
+const shortcut = ref("Ctrl+Alt+Shift+P");
 let unlistenPen: (() => void) | null = null;
 let unlistenTop: (() => void) | null = null;
 let unlistenReload: (() => void) | null = null;
@@ -22,6 +24,10 @@ let reminderTimer: ReturnType<typeof setInterval> | null = null;
 
 watch(isEditing, (v) => {
   document.body.classList.toggle("editing", v);
+});
+
+watch(activeTab, (v) => {
+  localStorage.setItem("activeTab", v);
 });
 
 onMounted(async () => {
@@ -38,8 +44,9 @@ onMounted(async () => {
     unlistenTop = await listen<boolean>("ontop-changed", (e) => {
       ontop.value = e.payload;
     });
-    const cfg: { theme: string } = await invoke("get_settings");
+    const cfg: { theme: string; penetrate: string } = await invoke("get_settings");
     document.body.classList.add("theme-" + (cfg.theme || "green"));
+    if (cfg.penetrate) shortcut.value = cfg.penetrate;
     await checkReminders();
     reminderTimer = setInterval(checkReminders, 30_000);
     const unload = await listen("notes-reloaded", () => load());
@@ -122,7 +129,7 @@ async function exportNotes(format: string) {
     <div class="handle" @mousedown="startDrag">
       <span class="title">便签</span>
       <div class="btns">
-        <button class="btn" :class="{ active: penetrating }" @mousedown.stop @click="togglePen" title="穿透切换 (Ctrl+Alt+Shift+P)">
+        <button class="btn" :class="{ active: penetrating }" @mousedown.stop @click="togglePen" :title="`穿透切换 (${shortcut})`">
           {{ penetrating ? '☑' : '☐' }}
         </button>
         <button class="btn" :class="{ active: ontop }" @mousedown.stop @click="toggleTop" title="置顶切换">
@@ -131,11 +138,15 @@ async function exportNotes(format: string) {
         <button class="btn close" @mousedown.stop @click="doClose" title="关闭">✕</button>
       </div>
     </div>
+    <div class="tabs">
+      <button class="tab" :class="{ active: activeTab === 'todo' }" @click="activeTab = 'todo'">待办</button>
+      <button class="tab" :class="{ active: activeTab === 'done' }" @click="activeTab = 'done'">已完成</button>
+    </div>
     <div class="body">
       <ContextMenu :on-add="add" :on-pen="togglePen" :on-top="toggleTop" :on-settings="() => showSettings = true" :on-export="exportNotes" :ontop="ontop" :penetrating="penetrating" :on-close="doClose" />
-      <NoteList :notes="notes" @toggle="toggleComplete" @update="(n: any) => update(n)" @remove="remove" @add="add" @add-subtask="addSubtask" @editing="(v: boolean) => isEditing = v" @reorder="reorder" />
+      <NoteList :notes="notes" :tab="activeTab" @toggle="toggleComplete" @update="(n: any) => update(n)" @remove="remove" @add="add" @add-subtask="addSubtask" @editing="(v: boolean) => isEditing = v" @reorder="reorder" />
     </div>
-    <div class="hint">Ctrl+Alt+Shift+P 穿透</div>
+    <div class="hint">{{ shortcut }} 穿透</div>
 
     <SettingsModal :show="showSettings" @close="showSettings = false" />
   </div>
@@ -161,6 +172,17 @@ async function exportNotes(format: string) {
 .btn.active { background: rgba(74,222,128,0.3); color: #4ade80; }
 .btn.close:hover { background: rgba(255,80,80,0.4); color: #ff6b6b; }
 .body { flex: 1; overflow: hidden; }
+.tabs {
+  display: flex; gap: 0; flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.tab {
+  flex: 1; padding: 6px 0; border: none; background: none;
+  color: rgba(255,255,255,0.4); font-size: 12px; cursor: pointer;
+  border-bottom: 2px solid transparent; transition: all 0.15s;
+}
+.tab:hover { color: rgba(255,255,255,0.7); }
+.tab.active { color: #4ade80; border-bottom-color: #4ade80; }
 .hint { font-size: 10px; color: rgba(255,255,255,0.2); text-align: center; padding: 4px; flex-shrink: 0; }
 
 /* Reminder toast */

@@ -103,22 +103,41 @@ async function saveWebDAV() {
   }
 }
 
-async function doSync() {
+async function doPush() {
   syncing.value = true;
-  syncStatus.value = "同步中...";
+  syncStatus.value = "上传中...";
   error.value = "";
   try {
-    const msg = await invoke<string>("sync_notes");
+    const msg = await invoke<string>("sync_push");
     syncStatus.value = msg;
   } catch (e) {
     const errStr = String(e);
-    // Only treat it as failure if it's NOT 404/empty-remote (which is fine)
     if (errStr.includes("404") || errStr.includes("远程文件不存在")) {
-      syncStatus.value = "首次同步（远程无数据）";
+      syncStatus.value = "首次上传（远程无数据）";
       return;
     }
     error.value = errStr;
-    syncStatus.value = "同步失败";
+    syncStatus.value = "上传失败";
+  } finally {
+    syncing.value = false;
+  }
+}
+
+async function doPull() {
+  syncing.value = true;
+  syncStatus.value = "下载中...";
+  error.value = "";
+  try {
+    const msg = await invoke<string>("sync_pull");
+    syncStatus.value = msg;
+  } catch (e) {
+    const errStr = String(e);
+    if (errStr.includes("404") || errStr.includes("远程文件不存在")) {
+      syncStatus.value = "远程无数据";
+      return;
+    }
+    error.value = errStr;
+    syncStatus.value = "下载失败";
   } finally {
     syncing.value = false;
   }
@@ -168,15 +187,15 @@ async function save() {
           </div>
         </label>
 
-        <!-- WebDAV 坚果云 -->
-        <div class="section-title">WebDAV 同步（坚果云）</div>
+        <!-- WebDAV 同步 -->
+        <div class="section-title">WebDAV 同步</div>
         <label class="field">
-          <span class="label">坚果云 WebDAV 地址</span>
-          <input v-model="webdavUrl" class="input" placeholder="https://dav.jianguoyun.com/dav/" />
-          <span class="hint">坚果云 WebDAV 根地址，必须以 / 结尾</span>
+          <span class="label">WebDAV 地址</span>
+          <input v-model="webdavUrl" class="input" placeholder="https://dav.example.com/dav/" />
+          <span class="hint">WebDAV 根地址，必须以 / 结尾</span>
         </label>
         <label class="field">
-          <span class="label">坚果云账号</span>
+          <span class="label">账号</span>
           <input v-model="webdavUser" class="input" placeholder="your@email.com" />
         </label>
         <label class="field">
@@ -190,7 +209,8 @@ async function save() {
         </label>
         <div class="webdav-actions">
           <button class="btn" @click="saveWebDAV">保存配置</button>
-          <button class="btn primary" :disabled="syncing" @click="doSync">{{ syncing ? '同步中...' : '立即同步' }}</button>
+          <button class="btn primary" :disabled="syncing" @click="doPush">{{ syncing ? '...' : '上传' }}</button>
+          <button class="btn primary" :disabled="syncing" @click="doPull">{{ syncing ? '...' : '下载' }}</button>
         </div>
         <div v-if="syncStatus" class="sync-status">{{ syncStatus }}</div>
 
