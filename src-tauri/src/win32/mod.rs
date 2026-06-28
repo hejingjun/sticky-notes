@@ -50,6 +50,13 @@ pub unsafe fn unembed_desktop(h: *mut c_void) {
     SetWindowLongPtrW(h, GWL_HWNDPARENT, ORIGINAL_PARENT);
 }
 
+/// Directly set topmost state via Win32 API. Call this LAST after any
+/// re-parenting, because re-parenting resets Z-order in Windows.
+pub unsafe fn set_topmost(h: *mut c_void, topmost: bool) {
+    let flag = if topmost { HWND_TOPMOST } else { HWND_NOTOPMOST };
+    SetWindowPos(h, flag, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+}
+
 unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: isize) -> BOOL {
     let ptr = lparam as *mut *mut c_void;
     // Find WorkerW
