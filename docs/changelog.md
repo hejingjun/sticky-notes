@@ -370,6 +370,7 @@ CREATE INDEX IF NOT EXISTS idx_updated ON notes(updated_at);
 | 16 | `dist/sticky-notes.exe` 运行找不到 localhost:1420 | 用 `cargo build --release` 覆盖了 `pnpm tauri build` 的输出。`cargo` 不内嵌前端页面 | 只能用 `pnpm tauri build` 构建生产版，`build.bat` 先删旧的 exe 再跑完整构建 |
 | 17 | `build.bat` 中 `del /f /q "dist\sticky-notes.exe"` 有时失败 | 文件被进程锁定 | 构建前先手动清理 |
 | 18 | `w!()` 宏在 `windows-sys` 0.59 中不工作 | 该宏在 `windows-strings` crate 中 | 自行写 `encode_wide()` 函数编码 UTF-16 |
+| 24 | 置顶按钮点击后窗口仍被其他窗口遮挡 | `toggle_ontop` 先调 `set_always_on_top(true)` 设 `HWND_TOPMOST`，再调 `unembed_desktop()` 重设父窗口；Windows 重设父窗口会重置 Z-order，冲掉 TOPMOST | 把 `set_always_on_top` 移到 embed/unembed 之后调用，并补发 `ontop-changed` 事件 |
 
 ### 6.3 Win32 子类化问题
 

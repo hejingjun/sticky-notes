@@ -30,10 +30,10 @@ fn get_penetrate() -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn toggle_ontop(w: tauri::WebviewWindow) -> Result<bool, String> {
+fn toggle_ontop(w: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<bool, String> {
     let v = !ONTOP.load(Ordering::SeqCst);
     ONTOP.store(v, Ordering::SeqCst);
-    w.set_always_on_top(v).map_err(|e| e.to_string())?;
+    // Embed/unembed first — re-parenting resets Z-order in Windows
     #[cfg(target_os = "windows")]
     if let Ok(h) = w.hwnd() {
         let h = h.0;
@@ -45,6 +45,9 @@ fn toggle_ontop(w: tauri::WebviewWindow) -> Result<bool, String> {
             }
         }
     }
+    // Set topmost AFTER re-parenting so HWND_TOPMOST is not overridden
+    w.set_always_on_top(v).map_err(|e| e.to_string())?;
+    let _ = app.emit("ontop-changed", v);
     Ok(v)
 }
 
