@@ -43,13 +43,9 @@ fn toggle_ontop(w: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<bool, 
             } else {
                 win32::embed_desktop(h);
             }
-            // Set topmost LAST via Win32 API — Tauri's set_always_on_top alone
-            // is not reliable after re-parenting because Z-order gets reset.
-            win32::set_topmost(h, v);
         }
     }
-    // Keep Tauri's internal state in sync (no-op on Z-order now)
-    let _ = w.set_always_on_top(v);
+    w.set_always_on_top(v).map_err(|e| e.to_string())?;
     let _ = app.emit("ontop-changed", v);
     Ok(v)
 }
