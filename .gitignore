@@ -20,3 +20,6 @@ Thumbs.db
 
 # Rust
 *.rs.bk
+
+# Claude Code
+.claude/
