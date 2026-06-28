@@ -371,6 +371,7 @@ CREATE INDEX IF NOT EXISTS idx_updated ON notes(updated_at);
 | 17 | `build.bat` 中 `del /f /q "dist\sticky-notes.exe"` 有时失败 | 文件被进程锁定 | 构建前先手动清理 |
 | 18 | `w!()` 宏在 `windows-sys` 0.59 中不工作 | 该宏在 `windows-strings` crate 中 | 自行写 `encode_wide()` 函数编码 UTF-16 |
 | 24 | 置顶按钮点击后窗口仍被其他窗口遮挡 | `unembed_desktop` 重设父窗口后 Windows 重置 Z-order，Tauri 的 `set_always_on_top` 不够可靠 | 用 Win32 `SetWindowPos(HWND_TOPMOST)` 在 embed/unembed 之后直接设置，确保 topmost 最后生效 |
+| 25 | 启动时置顶按钮显示为"已置顶"但窗口实际未置顶 | Rust `ONTOP` 初始值为 `true`，前端 `ontop` ref 也是 `true`，但 `tauri.conf.json` 的 `alwaysOnTop` 为 `false`，三者不一致 | 将 `ONTOP` 和前端初始值都改为 `false`，与实际窗口状态一致 |
 
 ### 6.3 Win32 子类化问题
 

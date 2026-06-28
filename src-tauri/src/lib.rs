@@ -10,7 +10,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 static PEN: AtomicBool = AtomicBool::new(false);
-static ONTOP: AtomicBool = AtomicBool::new(true);
+static ONTOP: AtomicBool = AtomicBool::new(false);
 
 fn set_penetrate(w: &tauri::WebviewWindow, v: bool) -> Result<bool, String> {
     PEN.store(v, Ordering::SeqCst);

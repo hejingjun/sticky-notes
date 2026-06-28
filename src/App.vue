@@ -11,7 +11,7 @@ const { notes, load, add, remove, toggleComplete, update, addSubtask, reorder } 
 onMounted(() => load());
 
 const penetrating = ref(false);
-const ontop = ref(true);
+const ontop = ref(false);
 const showSettings = ref(false);
 const isEditing = ref(false);
 const activeTab = ref<"todo" | "done">((localStorage.getItem("activeTab") as "todo" | "done") || "todo");
