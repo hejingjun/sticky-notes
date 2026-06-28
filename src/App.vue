@@ -129,9 +129,6 @@ async function exportNotes(format: string) {
     <div class="handle" @mousedown="startDrag">
       <span class="title">便签</span>
       <div class="btns">
-        <button class="btn" :class="{ active: penetrating }" @mousedown.stop @click="togglePen" :title="`穿透切换 (${shortcut})`">
-          {{ penetrating ? '☑' : '☐' }}
-        </button>
         <button class="btn" :class="{ active: ontop }" @mousedown.stop @click="toggleTop" title="置顶切换">
           {{ ontop ? '📌' : '📍' }}
         </button>
@@ -143,7 +140,7 @@ async function exportNotes(format: string) {
       <button class="tab" :class="{ active: activeTab === 'done' }" @click="activeTab = 'done'">已完成</button>
     </div>
     <div class="body">
-      <ContextMenu :on-add="add" :on-pen="togglePen" :on-top="toggleTop" :on-settings="() => showSettings = true" :on-export="exportNotes" :ontop="ontop" :penetrating="penetrating" :on-close="doClose" />
+      <ContextMenu :on-add="add" :on-top="toggleTop" :on-settings="() => showSettings = true" :on-export="exportNotes" :ontop="ontop" :on-close="doClose" />
       <NoteList :notes="notes" :tab="activeTab" @toggle="toggleComplete" @update="(n: any) => update(n)" @remove="remove" @add="add" @add-subtask="addSubtask" @editing="(v: boolean) => isEditing = v" @reorder="reorder" />
     </div>
     <div class="hint">{{ shortcut }} 穿透</div>

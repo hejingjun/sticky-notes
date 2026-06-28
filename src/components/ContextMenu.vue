@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 
-const props = defineProps<{ onAdd: () => void; onPen: () => void; onTop: () => void; onSettings: () => void; onExport: (format: string) => void; ontop: boolean; penetrating: boolean; onClose: () => void }>();
+const props = defineProps<{ onAdd: () => void; onTop: () => void; onSettings: () => void; onExport: (format: string) => void; ontop: boolean; onClose: () => void }>();
 const menu = ref<{ show: boolean; x: number; y: number }>({ show: false, x: 0, y: 0 });
 
 function onCtx(e: MouseEvent) {
@@ -29,7 +29,6 @@ onUnmounted(() => {
   <div v-if="menu.show" class="ctx" :style="{ left: menu.x + 'px', top: menu.y + 'px' }">
     <div class="item" @click="props.onAdd(); hide()">新建便签</div>
     <div class="item" :class="{ active: props.ontop }" @click="props.onTop(); hide()">{{ props.ontop ? '✓ 置顶' : '置顶' }}</div>
-    <div class="item" :class="{ active: props.penetrating }" @click="props.onPen(); hide()">{{ props.penetrating ? '✓ 穿透' : '穿透' }}</div>
     <div class="sep"></div>
     <div class="item" @click="props.onSettings(); hide()">设置</div>
     <div class="sep"></div>
