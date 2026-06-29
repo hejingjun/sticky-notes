@@ -13,9 +13,9 @@ set "PNPM_DIR=C:\Users\hexin\.cache\codex-runtimes\codex-primary-runtime\depende
 set "PATH=%NODE_DIR%;%PNPM_DIR%;%PATH%"
 
 echo  Step 1/4: Installing dependencies...
-call pnpm install
+call npm install
 if %errorlevel% neq 0 (
-    echo [ERROR] pnpm install failed
+    echo [ERROR] npm install failed
     pause
     exit /b 1
 )
@@ -28,7 +28,7 @@ if exist "dist\sticky-notes.exe" (
 )
 
 echo  Step 3/4: Building frontend + Rust backend...
-call pnpm tauri build
+call npm run tauri build
 if %errorlevel% neq 0 (
     echo [ERROR] tauri build failed
     pause
