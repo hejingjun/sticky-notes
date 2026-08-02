@@ -8,7 +8,6 @@ const SUBCLASS_ID: usize = 1;
 const SW_SHOWNOACTIVATE: i32 = 4;
 
 const HTTRANSPARENT: isize = -1;
-
 /// TECH DEBT: PEN_PTR is a raw pointer to lib.rs's PEN AtomicBool.
 /// This is necessary because SetWindowSubclass callbacks cannot capture closures.
 /// The pointer is set exactly once in install_guard() before the window message
@@ -40,7 +39,14 @@ unsafe extern "system" fn subclass_proc(
         let h = hwnd as isize;
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(1));
-            ShowWindow(h as *mut c_void, SW_SHOWNOACTIVATE);
+            // Safety: verify the window still exists before calling ShowWindow.
+            // Without this check, a race between app exit and the guard thread
+            // would cause use-after-free on the HWND.
+            unsafe {
+                if IsWindow(h as *mut c_void) != 0 {
+                    ShowWindow(h as *mut c_void, SW_SHOWNOACTIVATE);
+                }
+            }
         });
         return 0;
     }

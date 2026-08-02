@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>架构审查报告 — 桌面便签项目</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; }
+  .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 24px; margin-bottom: 24px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
+  .badge-strong { background: #fee2e2; color: #dc2626; }
+  .badge-worth { background: #fef3c7; color: #d97706; }
+  .badge-speculative { background: #e0e7ff; color: #4f46e5; }
+  .diagram { background: #f1f5f9; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 13px; line-height: 1.6; white-space: pre; overflow-x: auto; }
+  .file-tag { background: #f0fdf4; color: #166534; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: monospace; }
+</style>
+</head>
+<body class="max-w-4xl mx-auto px-6 py-10">
+
+<h1 class="text-3xl font-bold mb-2">架构审查报告</h1>
+<p class="text-gray-500 mb-8">桌面便签项目 — Sticky Notes (Tauri 2.x + Vue 3)</p>
+
+<!-- Candidate 1 -->
+<div class="card">
+  <div class="flex items-center gap-3 mb-4">
+    <span class="badge badge-strong">Strong</span>
+    <h2 class="text-xl font-bold">1. lib.rs 承担过多职责</h2>
+  </div>
+
+  <div class="mb-4">
+    <span class="file-tag">src-tauri/src/lib.rs</span>
+    <span class="text-gray-500 text-sm ml-2">495 行</span>
+  </div>
+
+  <h3 class="font-semibold text-red-600 mb-2">问题</h3>
+  <p class="text-gray-700 mb-4">lib.rs 是一个<strong>浅层模块</strong>：接口（24 个 #[tauri::command]）几乎和实现一样复杂。它同时负责：窗口穿透/置顶、设置管理、WebDAV 同步（3 个完整命令）、窗口操作、自启动、托盘初始化、快捷键注册、Win32 桌面嵌入。理解任何一个功能都需要在 495 行中弹跳。</p>
+
+  <h3 class="font-semibold text-green-600 mb-2">解决方案</h3>
+  <p class="text-gray-700 mb-4">将 lib.rs 拆分为多个深层模块，每个模块隐藏自己的实现细节：</p>
+  <ul class="list-disc list-inside text-gray-700 mb-4 space-y-1">
+    <li><strong>window.rs</strong> — 窗口状态（穿透、置顶、透明度）</li>
+    <li><strong>settings_cmd.rs</strong> — 设置相关命令（get/set theme, shortcut, webdav, opacity, autostart）</li>
+    <li><strong>sync_cmd.rs</strong> — 同步命令（sync_notes, sync_push, sync_pull）</li>
+    <li>lib.rs 只保留 <strong>run()</strong> 和模块注册</li>
+  </ul>
+
+  <h3 class="font-semibold text-blue-600 mb-2">收益</h3>
+  <p class="text-gray-700 mb-4"><strong>局部性</strong>：修改同步逻辑只需看 sync_cmd.rs，不需要在 495 行中搜索。<strong>杠杆</strong>：每个模块的接口更小，更容易理解和测试。</p>
+
+  <h3 class="font-semibold mb-2">前后对比</h3>
+  <div class="grid grid-cols-2 gap-4">
+    <div>
+      <p class="text-sm font-semibold text-gray-500 mb-2">Before — 浅层</p>
+      <div class="diagram">┌─────────────────────────┐
+│      lib.rs (495行)      │
+│  ┌───────────────────┐  │
+│  │ 24 个 command 函数 │  │
+│  │ setup() 初始化     │  │
+│  │ 全局状态 PEN/ONTOP │  │
+│  │ 3个 sync 命令      │  │
+│  │ 托盘/快捷键/Win32  │  │
+│  └───────────────────┘  │
+└─────────────────────────┘</div>
+    </div>
+    <div>
+      <p class="text-sm font-semibold text-gray-500 mb-2">After — 深层</p>
+      <div class="diagram">┌──────────┐
+│ lib.rs   │ ← 只剩 run() + 模块注册
+│ (~80行)  │
+└────┬─────┘
+     │
+  ┌──┴──┬──────┬──────┐
+  ▼     ▼      ▼      ▼
+window  settings sync  commands
+.rs     _cmd.rs  _cmd  .rs
+(60行)  (80行)  .rs   (152行)
+                (120行)</div>
+    </div>
+  </div>
+</div>
+
+<!-- Candidate 2 -->
+<div class="card">
+  <div class="flex items-center gap-3 mb-4">
+    <span class="badge badge-strong">Strong</span>
+    <h2 class="text-xl font-bold">2. NoteCard.vue 职责过载</h2>
+  </div>
+
+  <div class="mb-4">
+    <span class="file-tag">src/components/NoteCard.vue</span>
+    <span class="text-gray-500 text-sm ml-2">364 行</span>
+  </div>
+
+  <h3 class="font-semibold text-red-600 mb-2">问题</h3>
+  <p class="text-gray-700 mb-4">NoteCard 同时管理：主标题编辑、子任务编辑（独立状态）、颜色选择器、截止日期选择器、拖拽排序、置顶/完成/删除操作。每个功能都有自己的 ref 状态，相互交织。修改颜色选择器的逻辑需要理解整个组件的上下文。</p>
+
+  <h3 class="font-semibold text-green-600 mb-2">解决方案</h3>
+  <p class="text-gray-700 mb-4">将 NoteCard 拆分为多个子组件，每个组件隐藏自己的状态：</p>
+  <ul class="list-disc list-inside text-gray-700 mb-4 space-y-1">
+    <li><strong>NoteCard.vue</strong> — 容器，只负责布局和拖拽</li>
+    <li><strong>ColorPicker.vue</strong> — 颜色选择器（showColors 状态内化）</li>
+    <li><strong>DueDatePicker.vue</strong> — 截止日期选择器</li>
+    <li><strong>SubtaskList.vue</strong> — 子任务列表（subEditingId 状态内化）</li>
+  </ul>
+
+  <h3 class="font-semibold text-blue-600 mb-2">收益</h3>
+  <p class="text-gray-700 mb-4"><strong>局部性</strong>：修改颜色选择器只看 ColorPicker.vue。<strong>可测试性</strong>：每个子组件可以独立测试。NoteCard 从 364 行降到约 150 行。</p>
+
+  <h3 class="font-semibold mb-2">前后对比</h3>
+  <div class="grid grid-cols-2 gap-4">
+    <div>
+      <p class="text-sm font-semibold text-gray-500 mb-2">Before — 浅层</p>
+      <div class="diagram">┌─────────────────────────┐
+│   NoteCard.vue (364行)   │
+│                         │
+│  editing (主标题编辑)    │
+│  subEditingId (子任务)   │
+│  showColors (颜色)       │
+│  showDuePicker (日期)    │
+│  拖拽逻辑               │
+│  6个 emit 事件           │
+└─────────────────────────┘</div>
+    </div>
+    <div>
+      <p class="text-sm font-semibold text-gray-500 mb-2">After — 深层</p>
+      <div class="diagram">┌──────────────────┐
+│ NoteCard (~150行) │ ← 容器 + 拖拽
+└────┬───┬───┬─────┘
+     │   │   │
+     ▼   ▼   ▼
+  Color  Due  Subtask
+  Picker Date List
+  (50行) (40行)(80行)</div>
+    </div>
+  </div>
+</div>
+
+<!-- Candidate 3 -->
+<div class="card">
+  <div class="flex items-center gap-3 mb-4">
+    <span class="badge badge-worth">Worth exploring</span>
+    <h2 class="text-xl font-bold">3. 同步逻辑缺少独立的接缝</h2>
+  </div>
+
+  <div class="mb-4">
+    <span class="file-tag">src-tauri/src/lib.rs</span>
+    <span class="file-tag ml-2">src-tauri/src/sync/mod.rs</span>
+  </div>
+
+  <h3 class="font-semibold text-red-600 mb-2">问题</h3>
+  <p class="text-gray-700 mb-4">sync_notes / sync_push / sync_pull 三个命令直接嵌入 lib.rs，每个都有约 40 行的样板代码（获取 WebDAV 配置、构建 URL、读写 ETag）。这些重复模式违反了 DRY 原则，且同步逻辑无法独立测试。</p>
+
+  <h3 class="font-semibold text-green-600 mb-2">解决方案</h3>
+  <p class="text-gray-700 mb-4">提取一个 <strong>SyncEngine</strong> 深层模块：</p>
+  <ul class="list-disc list-inside text-gray-700 mb-4 space-y-1">
+    <li>接口：<code>sync()</code>, <code>push()</code>, <code>pull()</code></li>
+    <li>实现：WebDAV 配置获取、URL 构建、ETag 管理全部隐藏在内部</li>
+    <li>lib.rs 中的命令变成薄适配器，只做参数提取和错误转换</li>
+  </ul>
+
+  <h3 class="font-semibold text-blue-600 mb-2">收益</h3>
+  <p class="text-gray-700 mb-4"><strong>杠杆</strong>：调用者只需调用 engine.sync()，不需要知道 ETag、URL 构建等细节。<strong>可测试性</strong>：SyncEngine 可以用 mock HTTP 客户端独立测试。</p>
+</div>
+
+<!-- Candidate 4 -->
+<div class="card">
+  <div class="flex items-center gap-3 mb-4">
+    <span class="badge badge-worth">Worth exploring</span>
+    <h2 class="text-xl font-bold">4. useNotes.ts 排序逻辑可深化</h2>
+  </div>
+
+  <div class="mb-4">
+    <span class="file-tag">src/composables/useNotes.ts</span>
+    <span class="text-gray-500 text-sm ml-2">143 行</span>
+  </div>
+
+  <h3 class="font-semibold text-red-600 mb-2">问题</h3>
+  <p class="text-gray-700 mb-4">useNotes 同时负责 CRUD 操作和排序逻辑。add() 和 reorder() 函数中有大量排序/重平衡代码（约占 60% 代码量），这些逻辑与数据操作耦合在一起。排序策略的变更（比如从 hex 改为其他编码）会影响整个 composable。</p>
+
+  <h3 class="font-semibold text-green-600 mb-2">解决方案</h3>
+  <p class="text-gray-700 mb-4">排序逻辑已经部分提取到 <code>utils/ordering.ts</code>，但 add() 和 reorder() 中仍有内联的重平衡逻辑。可以进一步提取：</p>
+  <ul class="list-disc list-inside text-gray-700 mb-4 space-y-1">
+    <li><code>rebalanceNotes(notes, insertAt)</code> — 封装重平衡逻辑</li>
+    <li><code>nextOrder(notes, parentId)</code> — 封装"下一个排序值"计算</li>
+    <li>useNotes 只保留纯 CRUD + 调用排序工具</li>
+  </ul>
+
+  <h3 class="font-semibold text-blue-600 mb-2">收益</h3>
+  <p class="text-gray-700 mb-4"><strong>局部性</strong>：排序策略变更只影响 ordering.ts。<strong>可测试性</strong>：排序逻辑可以独立单元测试，不需要 mock Tauri IPC。</p>
+</div>
+
+<!-- Candidate 5 -->
+<div class="card">
+  <div class="flex items-center gap-3 mb-4">
+    <span class="badge badge-speculative">Speculative</span>
+    <h2 class="text-xl font-bold">5. 前端事件监听缺乏统一模式</h2>
+  </div>
+
+  <div class="mb-4">
+    <span class="file-tag">src/App.vue</span>
+  </div>
+
+  <h3 class="font-semibold text-red-600 mb-2">问题</h3>
+  <p class="text-gray-700 mb-4">App.vue 中有 3 个手动管理的事件监听器（unlistenPen, unlistenTop, unlistenReload），每个都需要在 onUnmounted 中手动清理。这种模式容易遗漏，且随着功能增加会变得更混乱。</p>
+
+  <h3 class="font-semibold text-green-600 mb-2">解决方案</h3>
+  <p class="text-gray-700 mb-4">创建 <code>useTauriEvent</code> composable，自动管理生命周期：</p>
+  <ul class="list-disc list-inside text-gray-700 mb-4 space-y-1">
+    <li><code>useTauriEvent('penetrate-changed', (v) => penetrating.value = v)</code></li>
+    <li>自动注册、自动清理，无需手动管理 unlisten</li>
+  </ul>
+
+  <h3 class="font-semibold text-blue-600 mb-2">收益</h3>
+  <p class="text-gray-700 mb-4"><strong>杠杆</strong>：一行代码替代三行（listen + 赋值 + unlisten）。减少内存泄漏风险。</p>
+</div>
+
+<!-- Top Recommendation -->
+<div class="card border-2 border-red-200 bg-red-50">
+  <h2 class="text-xl font-bold text-red-700 mb-3">最佳建议</h2>
+  <p class="text-gray-700 mb-2">首先处理 <strong>候选 1（lib.rs 拆分）</strong>，理由：</p>
+  <ul class="list-disc list-inside text-gray-700 space-y-1">
+    <li>lib.rs 是整个 Rust 后端的入口，495 行的浅层模块是最大的架构债务</li>
+    <li>拆分后，后续的同步改进（候选 3）会自然落入 sync_cmd.rs</li>
+    <li>这是纯重构，不改变任何外部行为，风险最低</li>
+    <li>拆分后的模块结构会成为后续所有 Rust 代码的组织模板</li>
+  </ul>
+</div>
+
+</body>
+</html>

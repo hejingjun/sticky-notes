@@ -69,8 +69,27 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: isize) -> BOOL {
     1 // continue
 }
 
-pub unsafe fn apply_styles(h: *mut c_void) {
+/// Apply window opacity via WS_EX_LAYERED + SetLayeredWindowAttributes.
+///
+/// **Known issue**: WS_EX_LAYERED is incompatible with WebView2's DirectComposition
+/// on some systems (certain GPU drivers / Windows builds), causing the window to
+/// render as fully invisible. We therefore apply it lazily — only when the user
+/// explicitly changes opacity from the default 100% — and never at startup.
+///
+/// On systems where this causes issues, the window renders at full opacity and
+/// the CSS `backdrop-filter` still provides the glass effect.
+pub unsafe fn apply_opacity(h: *mut c_void, opacity_pct: f64) {
+    // opacity_pct is 0.0–1.0 (from settings). 1.0 = fully opaque = no layering needed.
+    if opacity_pct >= 0.99 {
+        // Remove WS_EX_LAYERED if present — let WebView2 render normally
+        let ex = GetWindowLongPtrW(h, GWL_EXSTYLE) as u32;
+        if ex & WS_EX_LAYERED != 0 {
+            SetWindowLongPtrW(h, GWL_EXSTYLE, (ex & !WS_EX_LAYERED) as isize);
+        }
+        return;
+    }
+    let alpha = (opacity_pct * 255.0).round().clamp(0.0, 255.0) as u8;
     let ex = GetWindowLongPtrW(h, GWL_EXSTYLE) as u32;
     SetWindowLongPtrW(h, GWL_EXSTYLE, (ex | WS_EX_LAYERED) as isize);
-    SetLayeredWindowAttributes(h, 0, 240, LWA_ALPHA);
+    SetLayeredWindowAttributes(h, 0, alpha, LWA_ALPHA);
 }

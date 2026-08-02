@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import type { Note } from "../types/note";
-import { COLORS } from "../types/note";
+import ColorPicker from "./ColorPicker.vue";
+import DueDatePicker from "./DueDatePicker.vue";
 
 const props = defineProps<{ note: Note; allNotes: Note[] }>();
 const emit = defineEmits<{
@@ -11,35 +12,27 @@ const emit = defineEmits<{
   addSubtask: [parentId: string];
   editing: [v: boolean];
   reorder: [draggedId: string, beforeId: string | null];
+  'resolve-conflict': [noteId: string];
 }>();
 
-// Self editing
+// Main editing
 const editing = ref(false);
 const editTitle = ref("");
-
 watch(editing, (v) => emit("editing", v));
 
 function startEdit() {
   editTitle.value = props.note.title;
   editing.value = true;
 }
-
 function save() {
   editing.value = false;
   if (editTitle.value !== props.note.title) {
     emit("update", { ...props.note, title: editTitle.value });
   }
 }
+function cancel() { editing.value = false; }
 
-function onBlur() {
-  save();
-}
-
-function cancel() {
-  editing.value = false;
-}
-
-// Subtask editing (independent from main editing state)
+// Subtask editing
 const subEditingId = ref<string | null>(null);
 const subEditTitle = ref("");
 
@@ -47,7 +40,6 @@ function startSubEdit(s: Note) {
   subEditingId.value = s.id;
   subEditTitle.value = s.title;
 }
-
 function saveSubEdit(s: Note) {
   if (subEditingId.value !== s.id) return;
   subEditingId.value = null;
@@ -55,41 +47,35 @@ function saveSubEdit(s: Note) {
     emit("update", { ...s, title: subEditTitle.value });
   }
 }
-
-function cancelSubEdit() {
-  subEditingId.value = null;
-}
+function cancelSubEdit() { subEditingId.value = null; }
 
 const subtasks = computed(() =>
   props.allNotes.filter((n) => n.parent_id === props.note.id)
 );
 
 const displayTitle = computed(() => props.note.title || "新便签");
+
+// Subtask collapse
+const collapsed = ref(false);
+const subtaskSummary = computed(() => {
+  const total = subtasks.value.length;
+  if (total === 0) return "";
+  const done = subtasks.value.filter((s) => s.completed).length;
+  return `${done}/${total} 已完成`;
+});
+
+// Color picker
 const showColors = ref(false);
 
-const subDueId = ref<string | null>(null);
+// Due date picker
 const showDuePicker = ref(false);
-const editDueDate = ref("");
-const editRemindAt = ref("");
-
-const dueDateStr = computed(() => {
-  if (!props.note.due_date) return "";
-  return new Date(props.note.due_date).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
-});
+const subDueId = ref<string | null>(null);
 const isOverdue = computed(() => {
   if (!props.note.due_date || props.note.completed) return false;
   return props.note.due_date < Date.now();
 });
 
-function initDueEdit(t?: Note) {
-  const target = t || props.note;
-  editDueDate.value = target.due_date ? new Date(target.due_date).toISOString().slice(0, 16) : "";
-  editRemindAt.value = target.remind_at ? new Date(target.remind_at).toISOString().slice(0, 16) : "";
-}
-
-function saveDue() {
-  const due = editDueDate.value ? new Date(editDueDate.value).getTime() : null;
-  const remind = editRemindAt.value ? new Date(editRemindAt.value).getTime() : null;
+function onDueSave(due: number | null, remind: number | null) {
   if (subDueId.value) {
     const s = props.allNotes.find((n) => n.id === subDueId.value);
     if (s) emit("update", { ...s, due_date: due, remind_at: remind });
@@ -99,8 +85,7 @@ function saveDue() {
   }
   showDuePicker.value = false;
 }
-
-function clearDue() {
+function onDueClear() {
   if (subDueId.value) {
     const s = props.allNotes.find((n) => n.id === subDueId.value);
     if (s) emit("update", { ...s, due_date: null, remind_at: null });
@@ -111,35 +96,26 @@ function clearDue() {
   showDuePicker.value = false;
 }
 
-// Drag state
+// Drag
 const dragOver = ref(false);
-
 function onDragStart(e: DragEvent) {
   const el = e.currentTarget as HTMLElement;
   el.style.opacity = "0.4";
   e.dataTransfer?.setData("text/plain", props.note.id);
   if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
 }
-
 function onDragEnd(e: DragEvent) {
   (e.currentTarget as HTMLElement).style.opacity = "";
 }
-
 function onDragOver(e: DragEvent) {
   dragOver.value = true;
   e.dataTransfer!.dropEffect = "move";
 }
-
-function onDragLeave() {
-  dragOver.value = false;
-}
-
 function onDrop(e: DragEvent) {
   dragOver.value = false;
   const draggedId = e.dataTransfer?.getData("text/plain");
   if (draggedId && draggedId !== props.note.id) {
-    // Emit up: reorder(draggedId, beforeId)
-    emit("reorder" as any, draggedId, props.note.id);
+    emit("reorder", draggedId, props.note.id);
   }
 }
 </script>
@@ -154,7 +130,7 @@ function onDrop(e: DragEvent) {
     @dragend="onDragEnd"
     @dragenter.prevent
     @dragover.prevent="onDragOver"
-    @dragleave="onDragLeave"
+    @dragleave="dragOver = false"
     @drop="onDrop"
   >
     <!-- Collapsed view -->
@@ -164,34 +140,35 @@ function onDrop(e: DragEvent) {
       </button>
       <div class="info">
         <span class="title-text" :class="{ done: note.completed }">{{ displayTitle }}</span>
-        <div class="meta-row">
-          <span v-if="isOverdue" class="overdue-badge">逾期</span>
-          <span v-else-if="dueDateStr" class="due-badge">{{ dueDateStr }}</span>
-        </div>
+        <span v-if="isOverdue" class="overdue-badge">逾期</span>
+        <span v-else-if="note.due_date" class="due-badge">{{ new Date(note.due_date).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" }) }}</span>
       </div>
-      <button class="due-btn" :class="{ overdue: isOverdue }" @click.stop="initDueEdit(); showDuePicker = !showDuePicker" title="截止日期">{{ note.due_date ? '📅' : '➕' }}</button>
-      <!-- Due picker popup -->
-      <div v-if="showDuePicker" class="due-popup" @click.stop @mouseleave="showDuePicker = false">
-        <label class="due-field">截止 <input v-model="editDueDate" type="datetime-local" class="due-input" /></label>
-        <label class="due-field">提醒 <input v-model="editRemindAt" type="datetime-local" class="due-input" /></label>
-        <div class="due-actions">
-          <button class="act save" @click="saveDue">保存</button>
-          <button class="act cancel" @click="clearDue">清除</button>
-        </div>
+      <!-- Hover actions -->
+      <div class="hover-actions">
+        <button v-if="note.conflict_id" class="conflict-btn" @click.stop="emit('resolve-conflict', note.id)" title="有冲突，点击解决">⚠️</button>
+        <DueDatePicker
+          :due-date="note.due_date"
+          :remind-at="note.remind_at"
+          :show="showDuePicker && !subDueId"
+          :is-overdue="isOverdue"
+          @save="onDueSave"
+          @clear="onDueClear"
+          @toggle="showDuePicker = !showDuePicker"
+        />
+        <ColorPicker
+          :color="note.color"
+          :show="showColors"
+          @select="(c) => { emit('update', { ...note, color: c }); showColors = false; }"
+          @close="showColors = !showColors"
+        />
+        <button class="icon-btn" @click.stop="startEdit" title="编辑">✎</button>
+        <button class="del" @click.stop="emit('remove', note.id)" title="删除">&times;</button>
       </div>
       <button class="pin-btn" :class="{ pinned: note.pinned }" @click.stop="emit('update', { ...note, pinned: !note.pinned })" title="置顶">📌</button>
-      <div class="color-wrap">
-        <div class="color-dot" :style="{ background: note.color }" @click.stop="showColors = !showColors" title="颜色"></div>
-        <div v-if="showColors" class="color-picker" @mouseleave="showColors = false">
-          <div v-for="c in COLORS" :key="c" class="color-opt" :class="{ active: note.color === c }" :style="{ background: c }" @click.stop="emit('update', { ...note, color: c }); showColors = false"></div>
-        </div>
-      </div>
-      <button class="icon-btn" @click.stop="startEdit" title="编辑">✎</button>
-      <button class="del" @click.stop="emit('remove', note.id)" title="删除">&times;</button>
     </div>
 
     <!-- Editing view -->
-    <div v-else class="edit-form" @blur="onBlur">
+    <div v-else class="edit-form">
       <input
         v-model="editTitle"
         class="edit-title"
@@ -206,37 +183,54 @@ function onDrop(e: DragEvent) {
     </div>
 
     <!-- Subtasks -->
-    <div class="subs">
-      <div v-for="s in subtasks" :key="s.id" class="sub-row" :class="{ editing: subEditingId === s.id }">
-        <button class="check" :class="{ done: s.completed }" @click="emit('toggle', s)">
-          {{ s.completed ? '✓' : '' }}
-        </button>
-
-        <!-- Sub collapsed -->
-        <template v-if="subEditingId !== s.id">
-          <div class="sub-info" @click="startSubEdit(s)">
-            <span class="sub-title" :class="{ done: s.completed }">{{ s.title || '子任务' }}</span>
-            <div class="sub-meta-row">
+    <div class="subs" v-if="subtasks.length > 0">
+      <!-- Collapsed state: single row with triangle + summary -->
+      <div v-if="collapsed" class="sub-row collapse-summary-row" @click.stop="collapsed = false">
+        <span class="collapse-icon">▸</span>
+        <span class="collapse-text">{{ subtaskSummary }}</span>
+      </div>
+      <!-- Expanded state: subtask list with triangle on first row -->
+      <template v-else>
+        <div v-for="(s, idx) in subtasks" :key="s.id" class="sub-row" :class="{ editing: subEditingId === s.id }">
+          <button v-if="idx === 0" class="collapse-icon-btn" @click.stop="collapsed = true">▾</button>
+          <span v-else class="collapse-spacer"></span>
+          <button class="check" :class="{ done: s.completed }" @click="emit('toggle', s)">
+            {{ s.completed ? '✓' : '' }}
+          </button>
+          <template v-if="subEditingId !== s.id">
+            <div class="sub-info" @click="startSubEdit(s)">
+              <span class="sub-title" :class="{ done: s.completed }">{{ s.title || '子任务' }}</span>
               <span v-if="s.due_date && s.due_date < Date.now() && !s.completed" class="overdue-badge">逾期</span>
               <span v-else-if="s.due_date" class="due-badge">{{ new Date(s.due_date).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" }) }}</span>
             </div>
-          </div>
-          <button class="due-btn" :class="{ overdue: s.due_date && s.due_date < Date.now() && !s.completed }" @click.stop="initDueEdit(s); subDueId = s.id; showDuePicker = true" title="截止日期">{{ s.due_date ? '📅' : '➕' }}</button>
-          <button class="icon-btn" @click="startSubEdit(s)" title="编辑">✎</button>
-          <button class="del" @click="emit('remove', s.id)" title="删除">&times;</button>
-        </template>
-
-        <!-- Sub editing -->
-        <div v-else class="sub-edit" @blur="saveSubEdit(s)">
-          <input v-model="subEditTitle" class="edit-title" placeholder="子任务标题" @keydown.escape="cancelSubEdit" @keydown.enter="saveSubEdit(s)" />
-          <div class="edit-actions">
-            <button class="act save" @mousedown.prevent="saveSubEdit(s)">保存</button>
-            <button class="act cancel" @mousedown.prevent="cancelSubEdit">取消</button>
+            <div class="sub-hover-actions">
+              <DueDatePicker
+                v-if="subDueId === s.id"
+                :due-date="s.due_date"
+                :remind-at="s.remind_at"
+                :show="showDuePicker"
+                :is-overdue="s.due_date ? s.due_date < Date.now() && !s.completed : false"
+                @save="onDueSave"
+                @clear="onDueClear"
+                @toggle="showDuePicker = !showDuePicker"
+              />
+              <button v-else class="due-btn-sm" @click.stop="subDueId = s.id; showDuePicker = true" title="截止日期">📅</button>
+              <button class="del" @click="emit('remove', s.id)" title="删除">&times;</button>
+            </div>
+          </template>
+          <div v-else class="sub-edit">
+            <input v-model="subEditTitle" class="edit-title" placeholder="子任务标题" @keydown.escape="cancelSubEdit" @keydown.enter="saveSubEdit(s)" />
+            <div class="edit-actions">
+              <button class="act save" @mousedown.prevent="saveSubEdit(s)">保存</button>
+              <button class="act cancel" @mousedown.prevent="cancelSubEdit">取消</button>
+            </div>
           </div>
         </div>
-      </div>
-
-      <!-- Add subtask -->
+        <button class="add-sub" @click="emit('addSubtask', note.id)">+ 子任务</button>
+      </template>
+    </div>
+    <!-- Add subtask when no subtasks exist -->
+    <div v-else class="subs">
       <button class="add-sub" @click="emit('addSubtask', note.id)">+ 子任务</button>
     </div>
   </div>
@@ -244,121 +238,291 @@ function onDrop(e: DragEvent) {
 
 <style scoped>
 .card {
-  background: rgba(255,255,255,0.05);
+  background: var(--surface-1);
   border-left: 3px solid #666;
-  border-radius: 6px;
-  padding: 8px 10px;
-  transition: all 0.15s;
+  border-radius: 8px;
+  padding: var(--sp-md);
+  transition: all var(--duration) var(--ease);
+  position: relative;
 }
-.card:hover { background: rgba(255,255,255,0.08); }
-.card.drag-over { border-left-color: #4ade80 !important; background: rgba(74,222,128,0.08); }
-.card.editing { background: rgba(30,30,30,0.95); }
-.row { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
-.check {
-  width: 18px; height: 18px; border-radius: 4px;
-  border: 1.5px solid rgba(255,255,255,0.3);
-  background: transparent; color: #4ade80;
-  cursor: pointer; font-size: 11px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  margin-top: 1px;
+.card:hover { background: var(--surface-2); }
+.card.drag-over {
+  border-left-color: var(--accent) !important;
+  background: var(--accent-dim);
 }
-.check.done { background: rgba(74,222,128,0.2); border-color: #4ade80; }
-.info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.title-text { font-size: 13px; color: rgba(255,255,255,0.9); word-break: break-word; }
-.title-text.done { text-decoration: line-through; color: rgba(255,255,255,0.35); }
-.meta-row { display: flex; align-items: center; gap: 6px; }
-.due-badge, .overdue-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; flex-shrink: 0; }
-.due-badge { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.4); }
-.overdue-badge { background: rgba(255,80,80,0.25); color: #ff6b6b; }
-.due-btn {
-  background: none; border: none; cursor: pointer; font-size: 12px; flex-shrink: 0; padding: 0 2px; line-height: 1;
-  opacity: 0.3; transition: all 0.15s;
-}
-.due-btn:hover { opacity: 0.8; }
-.due-btn.overdue { opacity: 1; }
-.due-popup {
-  position: absolute; top: 100%; right: 0; z-index: 100; margin-top: 2px;
-  display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 8px;
-  background: rgba(24,24,24,0.96); backdrop-filter: blur(16px);
-  border: 1px solid rgba(255,255,255,0.1); min-width: 200px;
-}
-.due-field { display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(255,255,255,0.5); }
-.due-input {
-  flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 4px; color: #fff; font-size: 11px; padding: 4px 6px; outline: none;
-}
-.due-actions { display: flex; gap: 6px; justify-content: flex-end; }
-.card { position: relative; }
-.icon-btn {
-  background: none; border: none; color: rgba(255,255,255,0.2);
-  cursor: pointer; font-size: 13px; flex-shrink: 0; padding: 0 2px;
-}
-.icon-btn:hover { color: rgba(255,255,255,0.7); }
-.pin-btn {
-  background: none; border: none; cursor: pointer; flex-shrink: 0;
-  font-size: 12px; padding: 0 2px; line-height: 1; opacity: 0.3;
-  transition: all 0.15s;
-}
-.pin-btn:hover { opacity: 0.8; }
-.pin-btn.pinned { opacity: 1; filter: drop-shadow(0 0 2px rgba(255,200,0,0.3)); }
-.color-wrap { position: relative; flex-shrink: 0; display: flex; align-items: center; }
-.color-dot {
-  width: 14px; height: 14px; border-radius: 50%; cursor: pointer;
-  border: 1.5px solid rgba(255,255,255,0.15); transition: border-color 0.15s;
-}
-.color-dot:hover { border-color: rgba(255,255,255,0.4); }
-.color-picker {
-  position: absolute; top: 20px; right: 0; z-index: 100;
-  display: flex; gap: 3px; padding: 4px; border-radius: 6px;
-  background: rgba(24,24,24,0.96); backdrop-filter: blur(16px);
-  border: 1px solid rgba(255,255,255,0.1);
-}
-.color-opt {
-  width: 16px; height: 16px; border-radius: 50%; cursor: pointer;
-  border: 2px solid transparent; transition: border-color 0.1s;
-}
-.color-opt:hover { border-color: rgba(255,255,255,0.5); }
-.color-opt.active { border-color: #fff; }
-.del {
-  background: none; border: none; color: rgba(255,255,255,0.2);
-  cursor: pointer; font-size: 16px; flex-shrink: 0; line-height: 1;
-}
-.del:hover { color: rgba(255,100,100,0.8); }
-.edit-form { display: flex; flex-direction: column; gap: 6px; }
-.edit-title, .sub-edit .edit-title {
-  width: 100%; background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;
-  color: #fff; font-size: 13px; padding: 6px 8px; outline: none;
-}
-.edit-actions { display: flex; gap: 6px; justify-content: flex-end; }
-.act { padding: 3px 12px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; }
-.act.save { background: rgba(74,222,128,0.3); color: #4ade80; }
-.act.cancel { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5); }
-.act.save:hover { background: rgba(74,222,128,0.5); }
-.act.cancel:hover { background: rgba(255,255,255,0.15); }
+.card.editing { background: rgba(30, 30, 30, 0.95); }
 
-/* Subtask styles */
-.subs { margin-top: 6px; margin-left: 12px; display: flex; flex-direction: column; gap: 3px; }
-.sub-row {
-  display: flex; align-items: flex-start; gap: 6px;
-  padding: 4px 6px; border-radius: 4px;
-  font-size: 12px;
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-sm);
+  cursor: pointer;
 }
-.sub-row:hover { background: rgba(255,255,255,0.06); }
-.sub-row.editing { background: rgba(40,40,40,0.9); }
-.sub-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; cursor: pointer; }
-.sub-title { color: rgba(255,255,255,0.75); word-break: break-word; font-size: 12px; }
-.sub-title.done { text-decoration: line-through; color: rgba(255,255,255,0.3); }
-.sub-edit { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+
+.check {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border-medium);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  transition: all var(--duration) var(--ease);
+}
+.check.done {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  flex-wrap: wrap;
+}
+
+.title-text {
+  font-size: var(--font-md);
+  color: var(--text-primary);
+  word-break: break-word;
+  line-height: 1.4;
+}
+.title-text.done {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}
+
+/* Due date badges — always visible in info area */
+.due-badge, .overdue-badge {
+  font-size: var(--font-xs);
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.due-badge { background: var(--surface-2); color: var(--text-tertiary); }
+.overdue-badge { background: var(--danger-dim); color: var(--danger); }
+
+/* Pin — always visible but subtle */
+.pin-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: var(--font-base);
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0.2;
+  transition: all var(--duration) var(--ease);
+}
+.pin-btn:hover { opacity: 0.7; }
+.pin-btn.pinned { opacity: 1; filter: drop-shadow(0 0 2px var(--warning-dim)); }
+
+/* Hover actions — hidden by default, shown on row hover */
+.hover-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--duration) var(--ease);
+}
+.row:hover .hover-actions { opacity: 1; }
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--text-disabled);
+  cursor: pointer;
+  font-size: var(--font-md);
+  flex-shrink: 0;
+  padding: 0 2px;
+  transition: color var(--duration) var(--ease);
+}
+.icon-btn:hover { color: var(--text-secondary); }
+
+.del {
+  background: none;
+  border: none;
+  color: var(--text-disabled);
+  cursor: pointer;
+  font-size: 16px;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: color var(--duration) var(--ease);
+}
+.del:hover { color: var(--danger); }
+
+.conflict-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-md);
+  padding: 0 2px;
+  animation: conflict-pulse 2s ease-in-out infinite;
+}
+@keyframes conflict-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.edit-form { display: flex; flex-direction: column; gap: var(--sp-sm); }
+
+.edit-title {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border-medium);
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  padding: 7px 10px;
+  outline: none;
+  transition: border-color var(--duration) var(--ease);
+}
+.edit-title:focus { border-color: var(--accent); }
+
+.edit-actions { display: flex; gap: var(--sp-sm); justify-content: flex-end; }
+
+.act {
+  padding: 4px 14px;
+  border: none;
+  border-radius: 5px;
+  font-size: var(--font-sm);
+  cursor: pointer;
+  transition: all var(--duration) var(--ease);
+}
+.act.save { background: var(--accent-dim); color: var(--accent); }
+.act.cancel { background: var(--surface-1); color: var(--text-secondary); }
+.act.save:hover { background: var(--accent-glow); }
+.act.cancel:hover { background: var(--surface-3); }
+
+/* ---- Subtasks ---- */
+.subs {
+  margin-top: var(--sp-sm);
+  margin-left: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sub-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: var(--font-base);
+  transition: background var(--duration) var(--ease);
+}
+.sub-row:hover { background: var(--surface-1); }
+.sub-row.editing { background: rgba(40, 40, 40, 0.9); }
+
+.sub-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  cursor: pointer;
+}
+
+.sub-title {
+  color: var(--text-secondary);
+  word-break: break-word;
+  font-size: var(--font-base);
+}
+.sub-title.done {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}
+
+/* Subtask hover actions */
+.sub-hover-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--duration) var(--ease);
+}
+.sub-row:hover .sub-hover-actions { opacity: 1; }
+
+.sub-edit { display: flex; flex-direction: column; gap: var(--sp-xs); width: 100%; }
 .sub-row .check { width: 16px; height: 16px; font-size: 10px; }
 .sub-row .del { font-size: 14px; }
-.sub-row .icon-btn { font-size: 11px; }
+
+.due-btn-sm {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-sm);
+  flex-shrink: 0;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0.4;
+  transition: opacity var(--duration) var(--ease);
+}
+.due-btn-sm:hover { opacity: 0.8; }
 
 .add-sub {
-  background: none; border: none;
-  color: rgba(255,255,255,0.25); font-size: 11px;
-  cursor: pointer; padding: 2px 6px; border-radius: 4px;
-  text-align: left; transition: all 0.15s;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 5px;
+  text-align: left;
+  transition: all var(--duration) var(--ease);
 }
-.add-sub:hover { color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.05); }
+.add-sub:hover {
+  color: var(--text-secondary);
+  background: var(--surface-0);
+}
+
+/* ---- Collapse toggle ---- */
+.collapse-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1.2;
+  color: var(--text-secondary);
+  padding: 0;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  transition: color var(--duration) var(--ease);
+}
+.collapse-icon-btn:hover { color: var(--text-primary); }
+
+.collapse-spacer {
+  width: 16px;
+  flex-shrink: 0;
+}
+
+.collapse-summary-row {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  transition: background var(--duration) var(--ease);
+}
+.collapse-summary-row:hover { background: var(--surface-1); }
+.collapse-summary-row .collapse-icon {
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-tertiary);
+}
+.collapse-text {
+  font-size: var(--font-sm);
+  color: var(--text-tertiary);
+}
 </style>

@@ -40,17 +40,32 @@ onUnmounted(() => {
 
 <style scoped>
 .ctx {
-  position: fixed; z-index: 9999;
-  background: rgba(20,20,20,0.95); backdrop-filter: blur(20px);
-  border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
-  padding: 4px; min-width: 140px;
+  position: fixed;
+  z-index: 9999;
+  background: rgba(20, 20, 20, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: var(--sp-xs);
+  min-width: 140px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
+
 .item {
-  padding: 8px 12px; font-size: 12px; color: rgba(255,255,255,0.8);
-  border-radius: 4px; cursor: pointer;
+  padding: 7px 12px;
+  font-size: var(--font-base);
+  color: var(--text-primary);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all var(--duration) var(--ease);
 }
-.item:hover { background: rgba(255,255,255,0.1); }
-.item.close:hover { background: rgba(255,80,80,0.3); color: #ff6b6b; }
-.sep { height: 1px; background: rgba(255,255,255,0.08); margin: 4px 8px; }
-.item.active { color: #4ade80; }
+.item:hover { background: var(--surface-3); }
+.item.close:hover { background: var(--danger-dim); color: var(--danger); }
+.item.active { color: var(--accent); }
+
+.sep {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: var(--sp-xs) var(--sp-sm);
+}
 </style>

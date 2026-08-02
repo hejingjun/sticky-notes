@@ -1,10 +1,10 @@
 <!--
- * @LastEditTime: 2026-06-29
+ * @LastEditTime: 2026-08-01
 -->
 
 # Sticky Notes — 桌面便签
 
-一款优雅、轻巧的 Windows 桌面便签工具。毛玻璃界面、拖拽排序、子任务、WebDAV 同步。
+一款优雅、轻巧的 Windows 桌面便签工具。毛玻璃界面、拖拽排序、子任务、WebDAV 近实时同步。
 
 ![screenshot](docs/screenshot.png)
 
@@ -17,19 +17,19 @@
 | 🔄 拖拽排序 | 直接拖拽便签调整顺序 |
 | 📌 便签置顶 | 重要便签固定在列表最前 |
 | 🎨 便签颜色 | 8 种预设颜色（灰/红/橙/黄/绿/青/蓝/紫） |
-| 📂 子任务 | 每个便签可添加子任务，独立勾选/编辑/删除 |
-| ❄️ 毛玻璃主题 | 🌲松绿 / 🌊雾蓝 / 🪨暖灰 三种配色，透明度可调（10%-90%） |
-| 🖱️ 鼠标穿透 | `Ctrl+Alt+Shift+P` 快捷键切换穿透模式 |
-| 📌 窗口置顶 | `Ctrl+Shift+T` 切换窗口置顶，始终在其他窗口之上 |
-| 🖥️ 嵌入桌面 | 窗口嵌入桌面图标层下方，成为桌面小组件 |
+| 📂 子任务 | 每个便签可添加子任务，支持折叠/展开 |
+| ↩️ 撤销/重做 | `Ctrl+Z` 撤销，`Ctrl+Y` 重做，最多 50 步历史 |
+| ❄️ 毛玻璃主题 | 🌲松绿 / 🌊雾蓝 / 🪨暖灰 三种配色，透明度可调 |
+| 🖱️ 鼠标穿透 | 自定义快捷键切换穿透模式 |
+| 🖥️ 嵌入桌面 | 窗口嵌入桌面图标层下方，Win+D 可见 |
 | 🗔 系统托盘 | 关闭时隐藏到托盘，不干扰桌面 |
-| 🔄 WebDAV 同步 | 支持坚果云等 WebDAV 网盘同步 |
-| ⏰ 截止日期 | 设置截止时间和提醒，定时弹窗通知 |
+| 🔄 WebDAV 近实时同步 | 编辑后 3 秒自动推送，窗口获焦自动拉取，60 秒轮询兜底 |
+| ⚠️ 同步冲突解决 | 冲突时显示对比面板，可选择保留本地或远程版本 |
+| ⏰ 截止日期提醒 | 设置截止时间和提醒，支持延后 15 分钟 |
 | 🔍 搜索筛选 | 关键词搜索 + 颜色筛选 |
 | 📤 数据导出 | CSV 导出全部便签 |
 | 🚀 开机自启 | 设置开机自动启动 |
-| 💾 自动保存 | 编辑失焦自动保存，内容不丢失 |
-| 🗑️ 自动清理 | 已删除便签超过 30 天自动清除 |
+| 🔒 单实例 | 重复打开只激活已有窗口，不会创建多个实例 |
 
 ## 快速开始（使用）
 
@@ -69,25 +69,26 @@ npm run tauri dev
 npm run tauri build
 ```
 
-构建完成后，EXE 文件位于：
-```
-src-tauri/target/release/sticky-notes.exe
-```
-
 或直接运行 `build.bat`（Windows）一键构建，产物输出到 `dist/sticky-notes.exe`。
 
 ## 快捷键
 
 | 快捷键 | 功能 |
 |--------|------|
-| `Ctrl+Shift+T` | 切换窗口置顶 |
+| `Ctrl+Z` | 撤销（全局，输入框中不触发） |
+| `Ctrl+Y` | 重做（全局，输入框中不触发） |
 | `Ctrl+Alt+Shift+P` | 切换鼠标穿透（可在设置中修改） |
 
 ## WebDAV 同步配置
 
 1. 右键 → **设置**
 2. 填写 **服务器地址**、**用户名**、**密码**
-3. 点击 **保存配置** → **立即同步**
+3. 点击 **保存配置**
+
+配置完成后自动启用近实时同步：
+- 编辑便签后 **3 秒**自动推送
+- 切回应用窗口时自动拉取远程变更
+- 每 **60 秒**轮询一次作为兜底
 
 #### 推荐免费 WebDAV 服务
 
@@ -98,7 +99,7 @@ src-tauri/target/release/sticky-notes.exe
 | [Koofr](https://koofr.eu/) | `https://app.koofr.net/dav/` | 欧洲服务，稳定性高 |
 | 自建 Alist | 自定 | 适合有 NAS 的用户 |
 
-> 同步使用 `notes.json` 纯文本格式 + ETag 乐观锁 + LWW 合并策略，多设备编辑不会丢失数据。
+> 同步使用 ETag 乐观锁 + LWW 合并策略。冲突时便签卡片显示 ⚠️ 图标，点击可查看两个版本并选择保留哪个。
 
 ## 系统要求
 
@@ -112,7 +113,7 @@ src-tauri/target/release/sticky-notes.exe
 |----|------|
 | 桌面框架 | Tauri 2.x (Rust) |
 | 前端 UI | Vue 3 + Vite 6 + TypeScript |
-| 样式 | CSS Glassmorphism (毛玻璃) |
+| 样式 | CSS Glassmorphism + Design Tokens |
 | 存储 | SQLite (rusqlite) |
 | 同步 | reqwest WebDAV + ETag + LWW Merge |
 | Win32 API | windows-sys 0.59 |
@@ -121,37 +122,48 @@ src-tauri/target/release/sticky-notes.exe
 
 ```
 sticky-notes/
-├── src/                      # Vue 3 前端
-│   ├── App.vue               # 主应用（标签页/提醒弹窗/主题）
+├── src/                          # Vue 3 前端
+│   ├── App.vue                   # 主应用（标签页/提醒/同步/撤销）
 │   ├── components/
-│   │   ├── NoteCard.vue      # 便签卡片（编辑/颜色/日期/拖拽）
-│   │   ├── NoteList.vue      # 便签列表（搜索/筛选/Todo/Done）
-│   │   ├── ContextMenu.vue   # 右键菜单
-│   │   └── SettingsModal.vue # 设置面板（WebDAV/主题/快捷键/自启）
+│   │   ├── NoteCard.vue          # 便签卡片（渐进式披露交互）
+│   │   ├── NoteList.vue          # 便签列表（搜索/筛选/Todo/Done）
+│   │   ├── ColorPicker.vue       # 颜色选择器子组件
+│   │   ├── DueDatePicker.vue     # 截止日期选择器子组件
+│   │   ├── ConflictModal.vue     # 同步冲突解决弹窗
+│   │   ├── ContextMenu.vue       # 右键菜单
+│   │   └── SettingsModal.vue     # 设置面板
 │   ├── composables/
-│   │   └── useNotes.ts       # 便签数据逻辑（排序/CRUD/拖拽）
-│   ├── types/note.ts         # 类型定义 + 颜色常量
-│   └── styles/glass.css      # 毛玻璃主题样式
+│   │   ├── useNotes.ts           # 便签数据逻辑（CRUD/排序/撤销）
+│   │   ├── useUndoRedo.ts        # 撤销/重做栈管理
+│   │   ├── useTauriEvent.ts      # Tauri 事件自动清理
+│   │   └── useSync.ts            # WebDAV 近实时同步（三触发点）
+│   ├── utils/
+│   │   └── ordering.ts           # 排序工具（Fractional Index）
+│   ├── types/note.ts             # 类型定义 + 颜色常量
+│   └── styles/glass.css          # 毛玻璃主题 + Design Tokens
 ├── src-tauri/
 │   ├── src/
-│   │   ├── lib.rs            # 主入口（命令注册/托盘/嵌入桌面）
-│   │   ├── commands.rs       # Tauri 命令（CRUD/导出/提醒）
-│   │   ├── db.rs             # SQLite 数据库层
-│   │   ├── shortcuts.rs      # 设置持久化（JSON 文件）
-│   │   ├── sync/mod.rs       # WebDAV 同步（MKCOL/GET/PUT/LWW）
-│   │   ├── tray_icon.rs      # 系统托盘图标
-│   │   └── win32/            # Win32 API（桌面嵌入/窗口子类化）
-│   ├── icons/                # 应用图标（多尺寸）
-│   └── Cargo.toml            # Rust 依赖
-├── build.bat                 # Windows 一键构建脚本
-└── package.json              # 前端依赖
+│   │   ├── lib.rs                # 主入口（模块注册/托盘/嵌入桌面）
+│   │   ├── commands.rs           # Tauri 命令（CRUD/导出/提醒/冲突）
+│   │   ├── db.rs                 # SQLite 数据库层 + 冲突表
+│   │   ├── shortcuts.rs          # 设置持久化（JSON 文件）
+│   │   ├── sync_cmd.rs           # SyncEngine 深层模块
+│   │   ├── sync/mod.rs           # WebDAV 协议（MKCOL/GET/PUT/LWW）
+│   │   ├── settings_cmd.rs       # 设置相关命令
+│   │   ├── window.rs             # 窗口状态命令（穿透/置顶/透明度）
+│   │   ├── tray_icon.rs          # 系统托盘图标
+│   │   └── win32/                # Win32 API（桌面嵌入/窗口子类化）
+│   ├── icons/                    # 应用图标（多尺寸）
+│   └── Cargo.toml                # Rust 依赖
+├── build.bat                     # Windows 一键构建脚本
+└── package.json                  # 前端依赖
 ```
 
 ## 数据存储
 
 | 文件 | 路径 | 说明 |
 |------|------|------|
-| 数据库 | `%APPDATA%/sticky-notes/notes.db` | SQLite 数据库 |
+| 数据库 | `%APPDATA%/sticky-notes/notes.db` | SQLite 数据库（含冲突表） |
 | 设置 | `%APPDATA%/sticky-notes/shortcuts.json` | 快捷键、WebDAV 配置等 |
 | 同步状态 | `%APPDATA%/sticky-notes/.sync_etag` | WebDAV ETag |
 

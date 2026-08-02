@@ -1,63 +1,137 @@
+/* ============================================
+   Sticky Notes — Design System
+   极简 · 毛玻璃 · 呼吸感
+   ============================================ */
+
+/* ---- Reset ---- */
 * { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ---- Design Tokens ---- */
+:root {
+  /* Spacing */
+  --sp-xs: 4px;
+  --sp-sm: 8px;
+  --sp-md: 12px;
+  --sp-lg: 16px;
+  --sp-xl: 24px;
+
+  /* Typography */
+  --font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-xs: 10px;
+  --font-sm: 11px;
+  --font-base: 12px;
+  --font-md: 13px;
+  --font-lg: 14px;
+
+  /* Colors — neutral palette */
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.55);
+  --text-tertiary: rgba(255, 255, 255, 0.30);
+  --text-disabled: rgba(255, 255, 255, 0.18);
+
+  --surface-0: rgba(255, 255, 255, 0.03);
+  --surface-1: rgba(255, 255, 255, 0.05);
+  --surface-2: rgba(255, 255, 255, 0.08);
+  --surface-3: rgba(255, 255, 255, 0.12);
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-light: rgba(255, 255, 255, 0.10);
+  --border-medium: rgba(255, 255, 255, 0.18);
+
+  /* Accent */
+  --accent: #4ade80;
+  --accent-dim: rgba(74, 222, 128, 0.20);
+  --accent-glow: rgba(74, 222, 128, 0.35);
+
+  /* Danger */
+  --danger: #ff6b6b;
+  --danger-dim: rgba(255, 100, 100, 0.25);
+
+  /* Warning */
+  --warning: #e5c07b;
+  --warning-dim: rgba(255, 200, 0, 0.20);
+
+  /* Glass */
+  --glass-blur: blur(32px) saturate(180%);
+  --glass-radius: 12px;
+
+  /* Transition */
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --duration: 0.15s;
+}
+
+/* ---- Base ---- */
 body {
-  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  background: transparent; color: #fff; overflow: hidden; user-select: none;
+  font-family: var(--font-family);
+  background: transparent;
+  color: var(--text-primary);
+  overflow: hidden;
+  user-select: none;
+  font-size: var(--font-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
+
 body::before {
-  content: ""; position: fixed; inset: 0;
-  border-radius: 12px; z-index: -1;
-  backdrop-filter: blur(32px) saturate(180%);
-  -webkit-backdrop-filter: blur(32px) saturate(180%);
-  border: 1px solid rgba(255,255,255,0.06);
-  transition: background 0.3s ease;
+  content: "";
+  position: fixed;
+  inset: 0;
+  border-radius: var(--glass-radius);
+  z-index: -1;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-subtle);
+  transition: background 0.3s var(--ease);
 }
+
 body.editing::before {
   background: rgba(20, 20, 20, 0.88);
   backdrop-filter: blur(24px) saturate(140%);
   -webkit-backdrop-filter: blur(24px) saturate(140%);
 }
+
+/* ---- Themes ---- */
+
+/* Pine Green */
+body.theme-green::before {
+  background: rgba(18, 38, 30, var(--glass-opacity, 0.55));
+}
+body.theme-green .handle {
+  border-bottom: 1px solid rgba(74, 200, 140, 0.06);
+}
 body.theme-green.editing::before {
   background: rgba(16, 28, 24, 0.92);
 }
+
+/* Slate Blue */
+body.theme-blue::before {
+  background: rgba(16, 26, 40, var(--glass-opacity, 0.55));
+}
+body.theme-blue .handle {
+  border-bottom: 1px solid rgba(100, 160, 255, 0.06);
+}
 body.theme-blue.editing::before {
   background: rgba(14, 20, 30, 0.92);
+}
+
+/* Warm Gray */
+body.theme-gray::before {
+  background: rgba(26, 26, 28, var(--glass-opacity, 0.55));
+}
+body.theme-gray .handle {
+  border-bottom: 1px solid var(--border-subtle);
 }
 body.theme-gray.editing::before {
   background: rgba(22, 22, 22, 0.92);
 }
 
-/* ---- Theme: Pine Green — deep, calming, nature-inspired ---- */
-body.theme-green::before {
-  background: rgba(18, 38, 30, var(--glass-opacity, 0.55));
-  backdrop-filter: blur(32px) saturate(160%);
-  -webkit-backdrop-filter: blur(32px) saturate(160%);
-}
-body.theme-green .handle {
-  border-bottom: 1px solid rgba(74, 200, 140, 0.08);
-}
-
-/* ---- Theme: Slate Blue — cool, focused, professional ---- */
-body.theme-blue::before {
-  background: rgba(16, 26, 40, var(--glass-opacity, 0.55));
-  backdrop-filter: blur(32px) saturate(170%);
-  -webkit-backdrop-filter: blur(32px) saturate(170%);
-}
-body.theme-blue .handle {
-  border-bottom: 1px solid rgba(100, 160, 255, 0.08);
-}
-
-/* ---- Theme: Warm Gray — minimal, elegant, neutral ---- */
-body.theme-gray::before {
-  background: rgba(26, 26, 28, var(--glass-opacity, 0.55));
-  backdrop-filter: blur(32px) saturate(150%);
-  -webkit-backdrop-filter: blur(32px) saturate(150%);
-}
-body.theme-gray .handle {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 4px; }
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.20); }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
+}

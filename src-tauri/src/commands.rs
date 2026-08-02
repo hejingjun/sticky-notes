@@ -70,38 +70,7 @@ pub fn check_reminders(state: State<DbState>) -> Result<Vec<db::Note>, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     let now = now_ms();
     let window_start = now - 60_000;
-    // Filter in SQL: remind_at within the last 60s, or due_date is past and not completed
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, title, parent_id, [order], completed, pinned, color, \
-             created_at, updated_at, deleted_at, conflict_id, due_date, remind_at, completed_at \
-             FROM notes WHERE deleted_at IS NULL AND ( \
-               (remind_at <= ?1 AND remind_at > ?2) OR \
-               (due_date <= ?1 AND completed = 0) \
-             ) ORDER BY [order]",
-        )
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map(rusqlite::params![now, window_start], |row| {
-            Ok(db::Note {
-                id: row.get("id")?,
-                title: row.get("title")?,
-                parent_id: row.get("parent_id")?,
-                order: row.get("order")?,
-                completed: row.get("completed")?,
-                pinned: row.get("pinned")?,
-                color: row.get("color")?,
-                created_at: row.get("created_at")?,
-                updated_at: row.get("updated_at")?,
-                deleted_at: row.get("deleted_at")?,
-                conflict_id: row.get("conflict_id")?,
-                due_date: row.get("due_date")?,
-                remind_at: row.get("remind_at")?,
-                completed_at: row.get("completed_at")?,
-            })
-        })
-        .map_err(|e| e.to_string())?;
-    Ok(rows.filter_map(|r| r.ok()).collect())
+    db::check_reminders(&conn, now, window_start).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -138,6 +107,18 @@ pub fn export_notes(state: State<DbState>, format: String) -> Result<String, Str
         }
         _ => Err(format!("不支持的导出格式: {format}")),
     }
+}
+
+#[tauri::command]
+pub fn get_conflict(state: State<DbState>, note_id: String) -> Result<Option<db::Note>, String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    db::get_conflict(&conn, &note_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn resolve_conflict(state: State<DbState>, note_id: String, use_remote: bool) -> Result<(), String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    db::resolve_conflict(&conn, &note_id, use_remote).map_err(|e| e.to_string())
 }
 
 /// Escape a CSV field value: double-quote internal quotes, and prefix

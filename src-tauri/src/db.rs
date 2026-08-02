@@ -43,6 +43,10 @@ impl Default for Note {
 
 pub fn init_db(path: &str) -> Result<Connection, Box<dyn std::error::Error>> {
     let conn = Connection::open(path)?;
+    // WAL mode: better crash safety and read concurrency (best practice for SQLite)
+    conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+    // Busy timeout: wait up to 5s if the DB is locked (e.g. by a sync operation)
+    conn.execute_batch("PRAGMA busy_timeout=5000;")?;
     conn.execute_batch("
         CREATE TABLE IF NOT EXISTS notes (
             id TEXT PRIMARY KEY,
@@ -69,6 +73,13 @@ pub fn init_db(path: &str) -> Result<Connection, Box<dyn std::error::Error>> {
             log::warn!("ALTER TABLE completed_at failed: {e}");
         }
     }
+    // Conflict table: stores remote version when sync detects a conflict
+    conn.execute_batch("
+        CREATE TABLE IF NOT EXISTS conflicts (
+            note_id TEXT PRIMARY KEY,
+            remote_json TEXT NOT NULL
+        );
+    ")?;
     Ok(conn)
 }
 
@@ -96,7 +107,10 @@ pub fn list_notes(conn: &Connection) -> Result<Vec<Note>, Box<dyn std::error::Er
             completed_at: row.get("completed_at")?,
         })
     })?;
-    Ok(rows.filter_map(|r| r.ok()).collect())
+    Ok(rows.filter_map(|r| match r {
+        Ok(note) => Some(note),
+        Err(e) => { log::warn!("list_notes: 行解析失败: {e}"); None }
+    }).collect())
 }
 
 pub fn upsert_note(conn: &Connection, note: &Note) -> Result<(), Box<dyn std::error::Error>> {
@@ -131,4 +145,77 @@ pub fn purge_old(conn: &Connection, cutoff: i64) -> Result<usize, Box<dyn std::e
         params![cutoff],
     )?;
     Ok(count)
+}
+
+/// Store a conflicting remote version for a note.
+pub fn save_conflict(conn: &Connection, note_id: &str, remote_note: &Note) -> Result<(), Box<dyn std::error::Error>> {
+    let json = serde_json::to_string(remote_note)?;
+    conn.execute(
+        "INSERT INTO conflicts (note_id, remote_json) VALUES (?1, ?2) ON CONFLICT(note_id) DO UPDATE SET remote_json=excluded.remote_json",
+        params![note_id, json],
+    )?;
+    // Mark the note as having a conflict
+    conn.execute("UPDATE notes SET conflict_id = ?1 WHERE id = ?2", params![note_id, note_id])?;
+    Ok(())
+}
+
+/// Get the conflicting remote version for a note.
+pub fn get_conflict(conn: &Connection, note_id: &str) -> Result<Option<Note>, Box<dyn std::error::Error>> {
+    let mut stmt = conn.prepare("SELECT remote_json FROM conflicts WHERE note_id = ?1")?;
+    let mut rows = stmt.query_map(params![note_id], |row| {
+        let json: String = row.get("remote_json")?;
+        Ok(json)
+    })?;
+    match rows.next() {
+        Some(Ok(json)) => Ok(Some(serde_json::from_str(&json)?)),
+        _ => Ok(None),
+    }
+}
+
+/// Resolve a conflict: keep local (just clear conflict) or use remote (overwrite note).
+pub fn resolve_conflict(conn: &Connection, note_id: &str, use_remote: bool) -> Result<(), Box<dyn std::error::Error>> {
+    if use_remote {
+        if let Some(remote) = get_conflict(conn, note_id)? {
+            let mut note = remote;
+            note.conflict_id = None;
+            upsert_note(conn, &note)?;
+        }
+    } else {
+        conn.execute("UPDATE notes SET conflict_id = NULL WHERE id = ?1", params![note_id])?;
+    }
+    conn.execute("DELETE FROM conflicts WHERE note_id = ?1", params![note_id])?;
+    Ok(())
+}
+
+pub fn check_reminders(conn: &Connection, now: i64, window_start: i64) -> Result<Vec<Note>, Box<dyn std::error::Error>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, title, parent_id, [order], completed, pinned, color, \
+         created_at, updated_at, deleted_at, conflict_id, due_date, remind_at, completed_at \
+         FROM notes WHERE deleted_at IS NULL AND ( \
+           (remind_at <= ?1 AND remind_at > ?2) OR \
+           (due_date <= ?1 AND completed = 0) \
+         ) ORDER BY [order]",
+    )?;
+    let rows = stmt.query_map(params![now, window_start], |row| {
+        Ok(Note {
+            id: row.get("id")?,
+            title: row.get("title")?,
+            parent_id: row.get("parent_id")?,
+            order: row.get("order")?,
+            completed: row.get("completed")?,
+            pinned: row.get("pinned")?,
+            color: row.get("color")?,
+            created_at: row.get("created_at")?,
+            updated_at: row.get("updated_at")?,
+            deleted_at: row.get("deleted_at")?,
+            conflict_id: row.get("conflict_id")?,
+            due_date: row.get("due_date")?,
+            remind_at: row.get("remind_at")?,
+            completed_at: row.get("completed_at")?,
+        })
+    })?;
+    Ok(rows.filter_map(|r| match r {
+        Ok(note) => Some(note),
+        Err(e) => { log::warn!("check_reminders: 行解析失败: {e}"); None }
+    }).collect())
 }

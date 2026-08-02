@@ -13,6 +13,7 @@ const emit = defineEmits<{
   addSubtask: [parentId: string];
   editing: [v: boolean];
   reorder: [draggedId: string, beforeId: string | null];
+  'resolve-conflict': [noteId: string];
 }>();
 
 const search = ref("");
@@ -99,6 +100,7 @@ function onEditing(v: boolean) {
         @add-subtask="emit('addSubtask', $event)"
         @editing="onEditing"
         @reorder="(a, b) => emit('reorder', a, b)"
+        @resolve-conflict="(id) => emit('resolve-conflict', id)"
       />
       <div v-if="filteredNotes.length === 0" class="empty">暂无待办</div>
     </template>
@@ -118,6 +120,7 @@ function onEditing(v: boolean) {
           @add-subtask="emit('addSubtask', $event)"
           @editing="onEditing"
           @reorder="(a, b) => emit('reorder', a, b)"
+        @resolve-conflict="(id) => emit('resolve-conflict', id)"
         />
       </template>
       <div v-if="filteredNotes.length === 0" class="empty">暂无已完成任务</div>
@@ -127,51 +130,99 @@ function onEditing(v: boolean) {
 
 <style scoped>
 .list {
-  padding: 8px;
+  padding: var(--sp-sm);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-sm);
   height: 100%;
   overflow-y: auto;
 }
-.search-row { display: flex; gap: 4px; }
+
+.search-row { display: flex; gap: var(--sp-xs); }
+
 .search-input {
-  flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 6px; color: #fff; font-size: 12px; padding: 7px 10px; outline: none;
+  flex: 1;
+  background: var(--surface-1);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: var(--font-base);
+  padding: 7px 10px;
+  outline: none;
+  transition: border-color var(--duration) var(--ease);
 }
-.search-input:focus { border-color: rgba(255,255,255,0.2); }
-.search-input::placeholder { color: rgba(255,255,255,0.3); }
+.search-input:focus { border-color: var(--border-medium); }
+.search-input::placeholder { color: var(--text-tertiary); }
+
 .clear-filter {
-  background: none; border: none; color: rgba(255,255,255,0.4); cursor: pointer; font-size: 14px; padding: 0 4px;
-}
-.color-chips { display: flex; gap: 4px; flex-wrap: wrap; }
-.chip {
-  width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent;
-  cursor: pointer; padding: 0; transition: border-color 0.1s; font-size: 9px;
-  display: flex; align-items: center; justify-content: center;
-}
-.chip.active { border-color: #4ade80; }
-.chip:first-child {
-  width: auto; padding: 0 8px; background: rgba(255,255,255,0.06); border-radius: 10px;
-  color: rgba(255,255,255,0.5); font-size: 10px;
-}
-.chip:first-child.active { background: rgba(74,222,128,0.2); color: #4ade80; }
-.add-btn {
-  background: rgba(255,255,255,0.06);
-  border: 1px dashed rgba(255,255,255,0.12);
-  border-radius: 8px;
-  color: rgba(255,255,255,0.5);
-  padding: 10px;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
   cursor: pointer;
-  font-size: 12px;
-  transition: all 0.15s;
+  font-size: var(--font-lg);
+  padding: 0 var(--sp-xs);
 }
-.add-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
-.empty { text-align: center; color: rgba(255,255,255,0.25); font-size: 11px; padding: 20px 0; }
+
+.color-chips { display: flex; gap: var(--sp-xs); flex-wrap: wrap; }
+
+.chip {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color var(--duration) var(--ease);
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chip.active { border-color: var(--accent); }
+
+.chip:first-child {
+  width: auto;
+  padding: 0 10px;
+  background: var(--surface-1);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+.chip:first-child.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.add-btn {
+  background: var(--surface-0);
+  border: 1px dashed var(--border-light);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  padding: 12px;
+  cursor: pointer;
+  font-size: var(--font-base);
+  transition: all var(--duration) var(--ease);
+}
+.add-btn:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border-color: var(--border-medium);
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-disabled);
+  font-size: var(--font-sm);
+  padding: var(--sp-xl) 0;
+}
+
 .date-header {
-  font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.35);
-  padding: 8px 0 2px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  padding: var(--sp-sm) 0 2px;
+  border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 2px;
+  letter-spacing: 0.5px;
 }
-.date-header:first-child { padding-top: 2px; }
 </style>

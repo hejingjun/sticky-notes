@@ -17,7 +17,7 @@ impl Default for SettingsConfig {
         Self {
             penetrate: "Ctrl+Alt+Shift+P".into(),
             auto_purge: true,
-            opacity: 0.6,
+            opacity: 1.0,
             theme: "green".into(),
             webdav_url: String::new(),
             webdav_user: String::new(),

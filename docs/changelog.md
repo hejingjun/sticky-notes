@@ -1,7 +1,7 @@
 # Sticky Notes — 项目总结报告
 
-> 文档版本: 1.1  
-> 最后更新: 2026-06-26  
+> 文档版本: 1.2  
+> 最后更新: 2026-08-01  
 > 项目路径: `D:\Codex_Work\01 桌面便签开发`
 
 ---
@@ -406,6 +406,30 @@ CREATE INDEX IF NOT EXISTS idx_updated ON notes(updated_at);
 | 36 | 同步逻辑导致任务状态回退 | 双向合并（LWW）会把已完成的任务重新拉回未完成 | 拆分 `sync_push`（上传覆盖远程）和 `sync_pull`（下载覆盖本地），设置面板改为独立的「上传」和「下载」按钮 |
 | 37 | 快捷键修改后底部提示不更新 | `Ctrl+Alt+Shift+P` 硬编码在 App.vue 模板中 | 新增 `shortcut` ref，`onMounted` 时从 `get_settings` 读取，模板和 title 均使用动态值 |
 
+### 6.6 可靠性与质量改进（2026-08-01）
+
+| # | 问题 | 根因 | 修复方案 |
+|---|------|------|----------|
+| 38 | 部分电脑窗口不可见（进程在跑但显示不出来） | `WS_EX_LAYERED` 在启动时无条件应用，与 WebView2 的 DirectComposition 在部分 GPU 驱动/系统组合上不兼容 | `apply_styles` 重命名为 `apply_opacity`，改为条件式：仅在透明度 < 99% 时启用 `WS_EX_LAYERED`，≥ 99% 时移除该样式让 WebView2 正常渲染 |
+| 39 | 窗口恢复到屏幕外位置不可见 | `window.json` 保存的坐标未做屏幕边界校验，双屏拔掉后窗口残留到不可见区域 | 改用 `tauri-plugin-window-state` 插件，内置边界处理和 debounce，替代手写的约 40 行保存/恢复逻辑 |
+| 40 | `embed_desktop` 静默失败导致窗口不可见 | WorkerW 创建/枚举失败时无日志，窗口可能被 reparent 到错误位置 | 记录 `embed_desktop` 返回值到 `app.log`，setup 末尾加 `w.show()` 安全网 |
+| 41 | `set_opacity` 命令只保存不生效 | 前端调用 `set_opacity` 后只写 JSON，不调用 Win32 API 应用到窗口 | 命令内增加 `apply_opacity(hwnd, value)` 调用，设置立即生效 |
+| 42 | SQLite 使用默认 DELETE journal 模式 | 未设置 WAL 模式，崩溃安全性差 | `init_db` 中添加 `PRAGMA journal_mode=WAL` 和 `PRAGMA busy_timeout=5000` |
+| 43 | 零测试覆盖 | 从未编写任何单元测试 | 新增 Rust `sync::merge()` 11 个测试用例；前端提取 `ordering.ts` 纯函数模块 + vitest 测试框架 + 20+ 个测试用例 |
+| 44 | 手动窗口状态管理代码重复 | 手写约 40 行读写 `window.json` 逻辑，无 debounce | 引入 `tauri-plugin-window-state` 插件替代，一行注册替代全部手动代码 |
+
+### 6.7 架构审查修复（2026-08-01 第二轮）
+
+| # | 问题 | 根因 | 修复方案 |
+|---|------|------|----------|
+| 45 | 默认 opacity=0.6 触发 WS_EX_LAYERED 不兼容 — 部分电脑窗口不可见 | `SettingsConfig::default()` 中 `opacity: 0.6` 导致启动时添加 WS_EX_LAYERED，与 WebView2 DirectComposition 在部分系统上不兼容 | 默认值改为 `1.0`，用户主动调节透明度时才启用 WS_EX_LAYERED |
+| 46 | subclass WM_SHOWWINDOW 回调中 ShowWindow 竞争条件 | spawn 的线程 sleep 后直接调用 ShowWindow(hwnd)，如果窗口已销毁则 use-after-free | 调用前加 `IsWindow(hwnd)` 检查 |
+| 47 | reqwest Client 每次请求新建 — 无超时无连接复用 | sync 的 3 个函数各创建 `Client::new()`，无 timeout | 提取 `OnceLock<Client>` 共享实例，设置 30s 超时 |
+| 48 | sync 的 upsert 不在事务中 — 崩溃导致数据不一致 | `sync_notes`/`sync_pull` 中逐条 upsert 无事务包裹 | 用 `BEGIN`/`COMMIT`/`ROLLBACK` 包裹批量写入 |
+| 49 | merge 冲突检测字段不完整 | 只比较 title/completed/due_date/completed_at，遗漏 pinned/color/order/parent_id/remind_at | 补充全部 5 个遗漏字段 |
+| 50 | `list_notes` 静默吞掉行解析错误 | `.filter_map(\|r\| r.ok())` 丢弃所有错误 | 改为 match 分支，错误时记录日志 |
+| 51 | Cargo.toml 包含不必要的 staticlib + reqwest json feature | `staticlib` 用于 iOS，桌面只需 cdylib+rlib；`json` feature 未被使用 | 删除 `staticlib` 和 `"json"` feature |
+
 ---
 
 ## 七、关键文件逐文件说明
@@ -579,7 +603,7 @@ b5e3f79 build: fix production binary not embedding frontend, update build.bat
 2. **WebDAV 密码明文存储：** `shortcuts.json` 中的 `webdav_password` 未加密
 3. **子任务不支持递归嵌套：** 只有两级（父 -> 子），子任务不能再有子任务
 4. **提醒仅前端轮询：** 应用关闭时不会有任何提醒
-5. **窗口嵌入退出时未恢复：** 应用关闭时没有调用 `unembed_desktop`，理论上不影响下次启动
+5. ~~窗口嵌入退出时未恢复~~ → 已在 setup 末尾加 `w.show()` 安全网
 6. **托盘图标编码为硬编码数组：** `tray_icon.rs` 中的 RGBA 数据是生成的，修改图标需要重新生成
 7. **缺少错误处理 UI：** 多数 IPC 调用在 catch 中只 `console.error`，用户看不到错误
 8. **子任务日期弹窗与父便签共用位置：** 子任务的日期弹窗不能独立定位，跟随父便签按钮位置
