@@ -96,23 +96,42 @@ function onDueClear() {
   showDuePicker.value = false;
 }
 
-// Drag
-const dragOver = ref(false);
+// Drag — [DRAG-FIX-1] 用非响应式变量避免 dragover 频繁触发 re-render
+let _isDragOver = false;
+const dragging = ref(false);
+
 function onDragStart(e: DragEvent) {
-  const el = e.currentTarget as HTMLElement;
-  el.style.opacity = "0.4";
+  dragging.value = true; // [DRAG-FIX-2] 用 ref 只在 dragstart/dragend 时触发一次 re-render
   e.dataTransfer?.setData("text/plain", props.note.id);
   if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
 }
-function onDragEnd(e: DragEvent) {
-  (e.currentTarget as HTMLElement).style.opacity = "";
+function onDragEnd() {
+  dragging.value = false;
+  // [DRAG-FIX-3] dragend 后清理 dragOver 样式（非响应式，直接操作 DOM）
+  const card = document.querySelector('.card.drag-over');
+  if (card) card.classList.remove('drag-over');
 }
 function onDragOver(e: DragEvent) {
-  dragOver.value = true;
-  e.dataTransfer!.dropEffect = "move";
+  // [DRAG-FIX-4] 不修改 reactive ref，避免频繁 re-render 破坏拖拽
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  // [DRAG-FIX-5] 用 DOM 操作添加样式，不用 Vue 响应式
+  const el = e.currentTarget as HTMLElement;
+  if (!_isDragOver) {
+    _isDragOver = true;
+    el.classList.add('drag-over');
+  }
+}
+function onDragLeave(e: DragEvent) {
+  // [DRAG-FIX-6] 只在真正离开 card 时移除样式（检查 relatedTarget）
+  const el = e.currentTarget as HTMLElement;
+  const related = e.relatedTarget as HTMLElement | null;
+  if (related && el.contains(related)) return; // 还在 card 内部，不处理
+  _isDragOver = false;
+  el.classList.remove('drag-over');
 }
 function onDrop(e: DragEvent) {
-  dragOver.value = false;
+  _isDragOver = false;
+  (e.currentTarget as HTMLElement).classList.remove('drag-over');
   const draggedId = e.dataTransfer?.getData("text/plain");
   if (draggedId && draggedId !== props.note.id) {
     emit("reorder", draggedId, props.note.id);
@@ -123,18 +142,22 @@ function onDrop(e: DragEvent) {
 <template>
   <div
     class="card"
-    :class="{ editing, 'drag-over': dragOver }"
+    :class="{ editing, dragging }"
     :draggable="!editing"
     :style="{ borderLeftColor: note.color }"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
     @dragenter.prevent
     @dragover.prevent="onDragOver"
-    @dragleave="dragOver = false"
+    @dragleave="onDragLeave"
     @drop="onDrop"
   >
     <!-- Collapsed view -->
-    <div v-if="!editing" class="row" @click="startEdit">
+    <div
+      v-if="!editing"
+      class="row"
+      @click="startEdit"
+    >
       <button class="check" :class="{ done: note.completed }" @click.stop="emit('toggle', note)">
         {{ note.completed ? '✓' : '' }}
       </button>
@@ -244,12 +267,15 @@ function onDrop(e: DragEvent) {
   padding: var(--sp-md);
   transition: all var(--duration) var(--ease);
   position: relative;
+  cursor: grab;
 }
+.card:active { cursor: grabbing; }
 .card:hover { background: var(--surface-2); }
 .card.drag-over {
   border-left-color: var(--accent) !important;
   background: var(--accent-dim);
 }
+.card.dragging { opacity: 0.4; }
 .card.editing { background: rgba(30, 30, 30, 0.95); }
 
 .row {
@@ -331,9 +357,10 @@ function onDrop(e: DragEvent) {
   align-items: center;
   gap: 2px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--duration) var(--ease);
 }
-.row:hover .hover-actions { opacity: 1; }
+.row:hover .hover-actions { opacity: 1; pointer-events: auto; }
 
 .icon-btn {
   background: none;
@@ -448,9 +475,10 @@ function onDrop(e: DragEvent) {
   align-items: center;
   gap: 2px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--duration) var(--ease);
 }
-.sub-row:hover .sub-hover-actions { opacity: 1; }
+.sub-row:hover .sub-hover-actions { opacity: 1; pointer-events: auto; }
 
 .sub-edit { display: flex; flex-direction: column; gap: var(--sp-xs); width: 100%; }
 .sub-row .check { width: 16px; height: 16px; font-size: 10px; }

@@ -51,14 +51,15 @@ export function nextOrder(topNotes: Note[]): string {
  * Returns only the notes whose order actually changed (for efficient IPC).
  */
 export function rebalanceNotes(topNotes: Note[]): Note[] {
-  const sorted = [...topNotes].sort(sortNotes);
+  // [DRAG-FIX-7] 不排序：调用方（reorder）已通过 splice 将元素放到正确位置
+  // 如果这里再 sort(sortNotes)，会按旧 order 排序，撤销 splice 的效果
   const changed: Note[] = [];
-  for (let i = 0; i < sorted.length; i++) {
+  for (let i = 0; i < topNotes.length; i++) {
     const newOrd = hexOrder(i);
-    if (sorted[i].order !== newOrd) {
-      sorted[i].order = newOrd;
-      sorted[i].updated_at = Date.now();
-      changed.push(sorted[i]);
+    if (topNotes[i].order !== newOrd) {
+      topNotes[i].order = newOrd;
+      topNotes[i].updated_at = Date.now();
+      changed.push(topNotes[i]);
     }
   }
   return changed;

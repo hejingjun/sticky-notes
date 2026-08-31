@@ -10,7 +10,7 @@ import SettingsModal from "./components/SettingsModal.vue";
 import ConflictModal from "./components/ConflictModal.vue";
 
 const { notes, load, add, remove, toggleComplete, update, addSubtask, reorder, undo, redo, canUndo, canRedo } = useNotes();
-const { startSync, notifyChanged, isSyncing, syncError, webdavConfigured, checkConfig } = useSync();
+const { startSync, notifyChanged, syncNow, isSyncing, syncError, webdavConfigured, checkConfig } = useSync();
 
 let skipSync = false;
 onMounted(async () => {
@@ -83,6 +83,9 @@ function onKeydown(e: KeyboardEvent) {
   } else if (e.ctrlKey && e.key === "y") {
     e.preventDefault();
     redo();
+  } else if (e.ctrlKey && e.key === "s") {
+    e.preventDefault();
+    syncNow();
   }
 }
 
@@ -184,7 +187,7 @@ async function exportNotes(format: string) {
       <NoteList :notes="notes" :tab="activeTab" @toggle="toggleComplete" @update="(n: any) => update(n)" @remove="remove" @add="add" @add-subtask="addSubtask" @editing="(v: boolean) => isEditing = v" @reorder="reorder" @resolve-conflict="(id: string) => conflictNoteId = id" />
     </div>
     <div class="hint">
-      {{ shortcut }} 穿透 · Ctrl+Z 撤销
+      {{ shortcut }} 穿透 · Ctrl+Z 撤销 · Ctrl+S 同步
       <span v-if="isSyncing" class="sync-indicator">同步中...</span>
       <span v-else-if="syncError" class="sync-error" :title="syncError">同步失败</span>
     </div>

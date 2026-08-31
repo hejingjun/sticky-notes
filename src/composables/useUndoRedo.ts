@@ -3,9 +3,9 @@ import type { Note } from "../types/note";
 
 const MAX_HISTORY = 50;
 
-// Deep copy notes array (structuredClone-like)
+// Deep copy notes array (true deep clone, not shared references)
 function cloneNotes(notes: Note[]): Note[] {
-  return notes.map((n) => ({ ...n }));
+  return notes.map((n) => ({ ...n, due_date: n.due_date, remind_at: n.remind_at, completed_at: n.completed_at }));
 }
 
 const undoStack = ref<Note[][]>([]);

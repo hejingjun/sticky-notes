@@ -54,13 +54,20 @@ export function useNotes() {
 
   async function update(note: Note) {
     saveSnapshot(notes.value);
+    const prev = { ...note }; // Save previous state for rollback
     note.updated_at = Date.now();
-    await invoke("save_note", { note });
-    const idx = notes.value.findIndex((n) => n.id === note.id);
-    if (idx >= 0) {
-      const copy = [...notes.value];
-      copy[idx] = { ...note };
-      notes.value = copy.sort(sortNotes);
+    try {
+      await invoke("save_note", { note });
+      const idx = notes.value.findIndex((n) => n.id === note.id);
+      if (idx >= 0) {
+        const copy = [...notes.value];
+        copy[idx] = { ...note };
+        notes.value = copy.sort(sortNotes);
+      }
+    } catch (e) {
+      console.error("save_note failed, rolling back:", e);
+      // Rollback: restore previous state
+      Object.assign(note, prev);
     }
   }
 
